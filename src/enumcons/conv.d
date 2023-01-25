@@ -1,0 +1,3 @@
+module enumcons.conv;
+
+@safe:
