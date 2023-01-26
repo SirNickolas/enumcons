@@ -2,7 +2,7 @@ module enumcons.def;
 
 import std.meta: allSatisfy;
 import enumcons.generators: concat, concatInitLast, merge, unite;
-import enumcons.utils: TypeOf, declareSupertypeOf;
+import enumcons.utils: TypeOf, declareSupertype;
 public import enumcons.utils: unknownValue;
 
 private nothrow pure @safe @nogc:
@@ -36,7 +36,7 @@ template _Enum(alias generateMembers, Base, enums...) {
                 mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
     enum generated = generateMembers!enums(prefix);
     mixin(
-        `@(staticMap!(declareSupertypeOf, enums))
+        `@(declareSupertype!(generated.offsets, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {`, generated.code, '}'
     );

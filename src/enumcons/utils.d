@@ -21,10 +21,40 @@ unittest {
     static assert(is(TypeOf!(E.a) == E));
 }
 
-struct _supertypeOf(E);
+static if (__VERSION__ >= 2_095)
+    package template staticMapI(alias func, args...) {
+        import std.meta: AliasSeq;
 
-package alias declareSupertypeOf(alias sub) = _supertypeOf!(TypeOf!sub);
+        alias staticMapI = AliasSeq!();
+        static foreach (i, arg; args)
+            staticMapI = AliasSeq!(staticMapI, func!(i, arg));
+    }
+else // Simple but slow.
+    package template staticMapI(alias func, args...) {
+        template loop(tailArgs...) {
+            import std.meta: AliasSeq;
+
+            static if (tailArgs.length)
+                alias loop = AliasSeq!(
+                    func!(args.length - tailArgs.length, tailArgs[0]),
+                    loop!(tailArgs[1 .. $]),
+                );
+            else
+                alias loop = AliasSeq!();
+        }
+
+        alias staticMapI = loop!args;
+    }
+
+struct _HasSubtype(E) {
+    long offset;
+}
+
+package template declareSupertype(immutable(long)[ ] offsets, subtypes...) {
+    enum udaFor(size_t i, alias sub) = _HasSubtype!(TypeOf!sub)(offsets[i]);
+    alias declareSupertype = staticMapI!(udaFor, subtypes);
+}
 
 package template isSupertypeOf(E) {
-    enum isSupertypeOf(alias Uda) = is(Uda == _supertypeOf!E);
+    enum isSupertypeOf(alias uda) = is(typeof(uda) == _HasSubtype!E);
 }
