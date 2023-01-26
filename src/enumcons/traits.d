@@ -45,5 +45,6 @@ unittest {
     static assert(!_isEnumOrEnumMember!true);
 }
 
+alias _memberNames(alias e) = __traits(allMembers, _TypeOf!e);
 alias _OriginalType(alias x) = OriginalType!(_TypeOf!x);
 alias _CommonType(enums...) = CommonType!(staticMap!(_OriginalType, enums));
