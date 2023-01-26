@@ -14,7 +14,7 @@ string _generateOne(E)(in string attrPrefix, long offset) {
     static foreach (j, memberName; __traits(allMembers, E)) {{
         alias member = __traits(getMember, E, memberName);
         static if (__traits(getAttributes, member).length)
-            result ~= attrPrefix ~ j.to!string ~ ' ';
+            result ~= attrPrefix ~ j.stringof ~ ' ';
         result ~= memberName ~ '=' ~ (offset + member).to!string ~ ',';
     }}
     return result;
@@ -23,20 +23,21 @@ string _generateOne(E)(in string attrPrefix, long offset) {
 unittest {
     enum E { b, c, a, d = -4, e, f = 10, g, h = 1 }
 
-    assert(_generateOne!E(`@b0_`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
+    assert(_generateOne!E(`@b0LU_`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
 }
 
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{enum E { f, a, @c b = -2, c, @(d, "") d, e = a }});
 
-    assert(_generateOne!E(`@f0_`, 1) == `f=1,a=2,@f0_2 b=-1,c=0,@f0_4 d=1,e=2,`);
+    version (D_LP64)
+        assert(_generateOne!E(`@f0LU_`, 1) == `f=1,a=2,@f0LU_2LU b=-1,c=0,@f0LU_4LU d=1,e=2,`);
+    else
+        assert(_generateOne!E(`@f0u_`, 1) == `f=1,a=2,@f0u_2u b=-1,c=0,@f0u_4u d=1,e=2,`);
 }
 
-string _injectIndex(in string prefix, size_t i) {
-    import std.conv: to;
-
-    return '@' ~ prefix ~ i.to!string ~ '_';
+string _injectIndex(in string prefix, in string i) {
+    return '@' ~ prefix ~ i ~ '_';
 }
 
 package GenResult merge(enums...)(in string prefix) {
@@ -44,7 +45,7 @@ package GenResult merge(enums...)(in string prefix) {
 
     string code;
     static foreach (i, e; enums)
-        code ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i), 0);
+        code ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i.stringof), 0);
     return GenResult(code, new long[enums.length]);
 }
 
@@ -57,13 +58,14 @@ unittest {
     assert(merge(`a`).code == ``);
 }
 
+version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
     });
-    assert(merge!(A, B)(`a`).code == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
+    assert(merge!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=3,`);
 }
 
 struct _Point {
@@ -85,7 +87,7 @@ template _getPoints(e) {
 }
 
 package template unite(enums...) {
-    static if (enums.length) {
+    static if (enums.length >= 2) {
         import std.conv: to;
         import std.meta: staticMap, staticSort;
 
@@ -108,13 +110,14 @@ unittest {
     assert(unite(`a`).code == ``);
 }
 
+version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
     });
-    assert(unite!(A, B)(`a`).code == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
+    assert(unite!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=-3,`);
 }
 
 unittest {
@@ -152,7 +155,7 @@ package GenResult concat(enums...)(in string prefix) {
             alias E = typeof(e);
         static if (i)
             offset -= E.min;
-        code ~= _generateOne!E(prefix._injectIndex(i), offset);
+        code ~= _generateOne!E(prefix._injectIndex(i.stringof), offset);
         offset += E.max + 1L;
         offsets[i + 1] = offset;
     }}
@@ -168,13 +171,16 @@ unittest {
     assert(concat(`a`).code == ``);
 }
 
+version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(concat!(A, B)(`a`).code == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
+    assert(
+        concat!(A, B)(`a`).code == `a=0,@a0LU_1LU b=-1,c=0,d=1,x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,`
+    );
 }
 
 package template concatInitLast(enums...) {
@@ -184,11 +190,12 @@ package template concatInitLast(enums...) {
         GenResult concatInitLast(in string prefix) {
             import enumcons.utils: TypeOf;
 
-            auto result = concat!(enums[0 .. $ - 1])(prefix);
-            alias Last = TypeOf!(enums[$ - 1]);
+            enum n = enums.length - 1;
+            auto result = concat!(enums[0 .. n])(prefix);
+            alias Last = TypeOf!(enums[n]);
             result.code = _generateOne!Last(
-                prefix._injectIndex(enums.length - 1),
-                result.offsets[$ - 1] - Last.min,
+                prefix._injectIndex(n.stringof),
+                result.offsets[n] - Last.min,
             ) ~ result.code;
             return result;
         }
@@ -203,13 +210,14 @@ unittest {
     assert(concatInitLast(`a`).code == ``);
 }
 
+version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(
-        concatInitLast!(A, B)(`a`).code == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`,
+    assert(concatInitLast!(A, B)(`a`).code ==
+        `x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
     );
 }
