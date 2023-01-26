@@ -2,10 +2,12 @@ module enumcons.traits;
 
 nothrow pure @safe @nogc:
 
-template isEnumSafelyConvertible(From, To) if (is(From == enum) && is(To == enum)) {
-    import std.meta: anySatisfy;
-    import enumcons.utils: isSupertypeOf;
+template isEnumSafelyConvertible(From, To) if (is(From == enum) && __traits(isIntegral, From, To)) {
+    static if (is(From: To))
+        enum isEnumSafelyConvertible = true;
+    else {
+        import enumcons.utils: offsetForUpcast;
 
-    // TODO: Implement recursive check.
-    enum isEnumSafelyConvertible = anySatisfy!(isSupertypeOf!From, __traits(getAttributes, To));
+        enum isEnumSafelyConvertible = __traits(compiles, offsetForUpcast!(From, To));
+    }
 }

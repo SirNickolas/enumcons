@@ -143,7 +143,3 @@ unittest {
     static assert(!__traits(compiles, offsetForUpcast!(AD, X)));
     static assert(!__traits(compiles, offsetForUpcast!(X, AD)));
 }
-
-package template isSupertypeOf(E) {
-    enum isSupertypeOf(alias uda) = is(typeof(uda) == _HasSubtype!E);
-}
