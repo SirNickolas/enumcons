@@ -1,8 +1,8 @@
 module enumcons.generators;
 
-package nothrow pure @safe:
+private nothrow pure @safe:
 
-private string _generateOne(E)(in string attrPrefix, long offset) {
+string _generateOne(E)(in string attrPrefix, long offset) {
     import std.conv: to;
 
     string result;
@@ -28,20 +28,33 @@ unittest {
     assert(_generateOne!E(`@f0_`, 1) == `f=1,a=2,@f0_2 b=-1,c=0,@f0_4 d=1,e=2,`);
 }
 
-string _concat(enums...)(in string attrPrefix) {
+string _injectIndex(in string prefix, size_t i) {
     import std.conv: to;
 
-    string result;
+    return '@' ~ prefix ~ i.to!string ~ '_';
+}
+
+struct _ConcatResult {
+    string str;
+    long offset;
+}
+
+_ConcatResult _concatImpl(enums...)(in string prefix) {
+    string str;
     long offset;
     static foreach (i, e; enums) {{
         static if (!is(e E))
             alias E = typeof(e);
         static if (i)
             offset -= E.min;
-        result ~= _generateOne!E('@' ~ attrPrefix ~ i.to!string ~ '_', offset);
+        str ~= _generateOne!E(prefix._injectIndex(i), offset);
         offset += E.max + 1L;
     }}
-    return result;
+    return _ConcatResult(str, offset);
+}
+
+package string _concat(enums...)(in string prefix) {
+    return _concatImpl!enums(prefix).str;
 }
 
 unittest {
@@ -49,6 +62,7 @@ unittest {
     enum B { x, y = -1, z, w = z }
 
     assert(_concat!(A, B)(`a`) == `a=0,b=-1,c=0,d=1,x=3,y=2,z=3,w=3,`);
+    assert(_concat!A(`a`) == `a=0,b=-1,c=0,d=1,`);
     assert(_concat(`a`) == ``);
 }
 
@@ -61,7 +75,40 @@ unittest {
     assert(_concat!(A, B)(`a`) == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
 }
 
-string _unite(enums...)(in string prefix) {
+package string _concatInitLast(enums...)(in string prefix) {
+    static if (enums.length <= 1)
+        return _concatImpl!enums(prefix).str;
+    else {
+        import enumcons.traits: _TypeOf;
+
+        const leading = _concatImpl!(enums[0 .. $ - 1])(prefix);
+        alias Last = _TypeOf!(enums[$ - 1]);
+        return _generateOne!Last(
+            prefix._injectIndex(enums.length - 1),
+            leading.offset - Last.min,
+        ) ~ leading.str;
+    }
+}
+
+unittest {
+    enum A { a, b = -1, c, d }
+    enum B { x, y = -1, z, w = z }
+
+    assert(_concatInitLast!(A, B)(`a`) == `x=3,y=2,z=3,w=3,a=0,b=-1,c=0,d=1,`);
+    assert(_concatInitLast!A(`a`) == `a=0,b=-1,c=0,d=1,`);
+    assert(_concatInitLast(`a`) == ``);
+}
+
+static if (__VERSION__ >= 2_082)
+unittest {
+    mixin(q{
+        enum A { a, @A b = -1, c, d }
+        enum B { x, y = -1, @A z, @A @B w = z }
+    });
+    assert(_concatInitLast!(A, B)(`a`) == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`);
+}
+
+package string _unite(enums...)(in string prefix) {
     import std.algorithm.sorting: sort;
     import std.conv: to;
     import std.typecons: Tuple;
@@ -76,7 +123,7 @@ string _unite(enums...)(in string prefix) {
             events ~= Point(long.min, false); // Initially open.
         events ~= Point(E.min, false);
         events ~= Point(E.max, true);
-        result ~= _generateOne!E('@' ~ prefix ~ i.to!string ~ '_', 0);
+        result ~= _generateOne!E(prefix._injectIndex(i), 0);
     }}
 
     events.sort();

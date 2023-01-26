@@ -81,7 +81,6 @@ unittest {
 /// Like `ConcatWithBase`, except that the resulting enum's `.init` value will be that of the last
 /// passed argument, not first. In every other aspect, including the numbering scheme, they are
 /// exactly the same.
-version (none)
 template ConcatInitLast(enums...)
 if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
@@ -89,14 +88,12 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-version (none)
 template ConcatWithBaseInitLast(Base, enums...)
 if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     alias ConcatWithBaseInitLast = _Enum!(_concatInitLast, Base, enums);
 }
 
 ///
-version (none)
 unittest {
     enum A { a0, a1 }
     enum B { b0, b1 }
@@ -110,7 +107,10 @@ unittest {
 
     alias D = ConcatInitLast!(A, B.b1);
     // `b1` does not become `.init`; it becomes `@unknownValue`.
-    static assert(D.init == B.b0);
+    static assert(D.init == D.b0);
+    static assert(int(D.a0) == A.a0);
+    static assert(int(D.b0) > B.b0);
+    static assert(D.b0 == A.a1 + 1);
 }
 
 template Unite(enums...)
