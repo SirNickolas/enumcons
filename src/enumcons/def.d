@@ -34,10 +34,11 @@ template _Enum(alias generateMembers, Base, enums...) {
         static foreach (j, member; EnumMembers!(TypeOf!e))
             static if (__traits(getAttributes, member).length)
                 mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
+    enum generated = generateMembers!enums(prefix);
     mixin(
         `@(staticMap!(declareSupertypeOf, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
-        enum _Enum: Base {`, generateMembers!enums(prefix), '}'
+        enum _Enum: Base {`, generated.code, '}'
     );
 }
 

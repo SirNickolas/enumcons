@@ -1,5 +1,5 @@
 name        "enumcons"
-description "Enums with inheritance but without classes. @nogc nothrow pure @safe"
+description "Type-safe extensible enums without classes. @nogc nothrow pure @safe"
 authors     "Nickolay Bukreyev"
 copyright   "Copyright © 2023, Nickolay Bukreyev"
 license     "MIT"

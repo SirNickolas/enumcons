@@ -2,6 +2,11 @@ module enumcons.generators;
 
 private nothrow pure @safe:
 
+package struct GenResult {
+    string code;
+    immutable(long)[ ] offsets;
+}
+
 string _generateOne(E)(in string attrPrefix, long offset) {
     import std.conv: to;
 
@@ -34,22 +39,22 @@ string _injectIndex(in string prefix, size_t i) {
     return '@' ~ prefix ~ i.to!string ~ '_';
 }
 
-package string merge(enums...)(in string prefix) {
+package GenResult merge(enums...)(in string prefix) {
     import enumcons.utils: TypeOf;
 
-    string result;
+    string code;
     static foreach (i, e; enums)
-        result ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i), 0);
-    return result;
+        code ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i), 0);
+    return GenResult(code, new long[enums.length]);
 }
 
 unittest {
     enum A { a, b, c }
     enum B { x, y = 2, z }
 
-    assert(merge!(A, B)(`a`) == `a=0,b=1,c=2,x=0,y=2,z=3,`);
-    assert(merge!A(`a`) == `a=0,b=1,c=2,`);
-    assert(merge(`a`) == ``);
+    assert(merge!(A, B)(`a`).code == `a=0,b=1,c=2,x=0,y=2,z=3,`);
+    assert(merge!A(`a`).code == `a=0,b=1,c=2,`);
+    assert(merge(`a`).code == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -58,7 +63,7 @@ unittest {
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
     });
-    assert(merge!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
+    assert(merge!(A, B)(`a`).code == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
 }
 
 struct _Point {
@@ -98,9 +103,9 @@ unittest {
     enum A { a, b, c }
     enum B { x = 10, y, z }
 
-    assert(unite!(A, B)(`a`) == `a=0,b=1,c=2,x=10,y=11,z=12,`);
-    assert(unite!A(`a`) == `a=0,b=1,c=2,`);
-    assert(unite(`a`) == ``);
+    assert(unite!(A, B)(`a`).code == `a=0,b=1,c=2,x=10,y=11,z=12,`);
+    assert(unite!A(`a`).code == `a=0,b=1,c=2,`);
+    assert(unite(`a`).code == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -109,7 +114,7 @@ unittest {
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
     });
-    assert(unite!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
+    assert(unite!(A, B)(`a`).code == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
 }
 
 unittest {
@@ -120,7 +125,7 @@ unittest {
 
     static assert(!__traits(compiles, unite!(A, WrapsAround)(`a`)));
     static assert(!__traits(compiles, unite!(B, WrapsAround)(`a`)));
-    assert(unite!(C, WrapsAround)(`a`) ==
+    assert(unite!(C, WrapsAround)(`a`).code ==
         `x=18446744073709551614,y=18446744073709551615,a=0,b=9223372036854775808,`,
     );
 }
@@ -131,41 +136,36 @@ unittest {
     enum B: long { x = -2, y = 0 }
     enum C: long { x = -2, y = -1 }
 
-    assert(unite!(A, NonPositive)(`a`) == `x=1,y=2,a=0,b=-9223372036854775808,`);
+    assert(unite!(A, NonPositive)(`a`).code == `x=1,y=2,a=0,b=-9223372036854775808,`);
     static assert(!__traits(compiles, unite!(B, NonPositive)(`a`)));
     static assert(!__traits(compiles, unite!(C, NonPositive)(`a`)));
 }
 
-struct _ConcatResult {
-    string str;
-    long offset;
-}
+package GenResult concat(enums...)(in string prefix) {
+    import std.exception: assumeUnique;
 
-_ConcatResult _concatImpl(enums...)(in string prefix) {
-    string str;
+    string code;
+    auto offsets = new long[enums.length + 1]; // `concatInitLast` needs one extra element.
     long offset;
     static foreach (i, e; enums) {{
         static if (!is(e E))
             alias E = typeof(e);
         static if (i)
             offset -= E.min;
-        str ~= _generateOne!E(prefix._injectIndex(i), offset);
+        code ~= _generateOne!E(prefix._injectIndex(i), offset);
         offset += E.max + 1L;
+        offsets[i + 1] = offset;
     }}
-    return _ConcatResult(str, offset);
-}
-
-package string concat(enums...)(in string prefix) {
-    return _concatImpl!enums(prefix).str;
+    return GenResult(code, (() @trusted => assumeUnique(offsets))());
 }
 
 unittest {
     enum A { a, b = -1, c, d }
     enum B { x, y = -1, z, w = z }
 
-    assert(concat!(A, B)(`a`) == `a=0,b=-1,c=0,d=1,x=3,y=2,z=3,w=3,`);
-    assert(concat!A(`a`) == `a=0,b=-1,c=0,d=1,`);
-    assert(concat(`a`) == ``);
+    assert(concat!(A, B)(`a`).code == `a=0,b=-1,c=0,d=1,x=3,y=2,z=3,w=3,`);
+    assert(concat!A(`a`).code == `a=0,b=-1,c=0,d=1,`);
+    assert(concat(`a`).code == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -174,31 +174,33 @@ unittest {
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(concat!(A, B)(`a`) == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
+    assert(concat!(A, B)(`a`).code == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
 }
 
-package string concatInitLast(enums...)(in string prefix) {
+package template concatInitLast(enums...) {
     static if (enums.length <= 1)
-        return _concatImpl!enums(prefix).str;
-    else {
-        import enumcons.utils: TypeOf;
+        alias concatInitLast = merge!enums;
+    else
+        GenResult concatInitLast(in string prefix) {
+            import enumcons.utils: TypeOf;
 
-        const leading = _concatImpl!(enums[0 .. $ - 1])(prefix);
-        alias Last = TypeOf!(enums[$ - 1]);
-        return _generateOne!Last(
-            prefix._injectIndex(enums.length - 1),
-            leading.offset - Last.min,
-        ) ~ leading.str;
-    }
+            auto result = concat!(enums[0 .. $ - 1])(prefix);
+            alias Last = TypeOf!(enums[$ - 1]);
+            result.code = _generateOne!Last(
+                prefix._injectIndex(enums.length - 1),
+                result.offsets[$ - 1] - Last.min,
+            ) ~ result.code;
+            return result;
+        }
 }
 
 unittest {
     enum A { a, b = -1, c, d }
     enum B { x, y = -1, z, w = z }
 
-    assert(concatInitLast!(A, B)(`a`) == `x=3,y=2,z=3,w=3,a=0,b=-1,c=0,d=1,`);
-    assert(concatInitLast!A(`a`) == `a=0,b=-1,c=0,d=1,`);
-    assert(concatInitLast(`a`) == ``);
+    assert(concatInitLast!(A, B)(`a`).code == `x=3,y=2,z=3,w=3,a=0,b=-1,c=0,d=1,`);
+    assert(concatInitLast!A(`a`).code == `a=0,b=-1,c=0,d=1,`);
+    assert(concatInitLast(`a`).code == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -207,5 +209,7 @@ unittest {
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(concatInitLast!(A, B)(`a`) == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`);
+    assert(
+        concatInitLast!(A, B)(`a`).code == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`,
+    );
 }
