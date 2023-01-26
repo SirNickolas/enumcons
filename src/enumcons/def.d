@@ -158,3 +158,31 @@ unittest {
     // If it was allowed, `is_` could not be implemented effeciently.
     static assert(!is(Unite!(A, B)));
 }
+
+template Merge(enums...)
+if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+    // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
+    alias Merge = _Enum!(_merge, _CommonType!enums, enums);
+}
+
+/// ditto
+template MergeWithBase(Base, enums...)
+if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+    alias MergeWithBase = _Enum!(_merge, Base, enums);
+}
+
+///
+unittest {
+    enum A { a, b, c }
+    enum B { x = 1, y, z }
+    alias C = Merge!(A, B);
+
+    static assert(is(C == enum));
+    static assert(C.a == 0);
+    static assert(C.b == 1);
+    static assert(C.c == 2);
+    static assert(C.x == C.b);
+    static assert(C.y == C.c);
+    static assert(C.z == 3);
+    static assert(C.init == C.a);
+}

@@ -34,6 +34,101 @@ string _injectIndex(in string prefix, size_t i) {
     return '@' ~ prefix ~ i.to!string ~ '_';
 }
 
+package string _merge(enums...)(in string prefix) {
+    import enumcons.traits: _TypeOf;
+
+    string result;
+    static foreach (i, e; enums)
+        result ~= _generateOne!(_TypeOf!e)(prefix._injectIndex(i), 0);
+    return result;
+}
+
+unittest {
+    enum A { a, b, c }
+    enum B { x, y = 2, z }
+
+    assert(_merge!(A, B)(`a`) == `a=0,b=1,c=2,x=0,y=2,z=3,`);
+}
+
+static if (__VERSION__ >= 2_082)
+unittest {
+    mixin(q{
+        enum A { a, @B c = -2, b = 4 }
+        enum B { d = -10, e, @A f = 3 }
+    });
+    assert(_merge!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
+}
+
+struct _Point {
+    long pos;
+    bool closed;
+}
+
+enum _cmpPoints(_Point a, _Point b) = a.pos != b.pos ? a.pos < b.pos : a.closed < b.closed;
+
+template _getPoints(e) {
+    import std.meta: AliasSeq;
+
+    static if (!is(e E))
+        alias E = typeof(e);
+    static if (long(E.min) <= long(E.max))
+        alias _getPoints = AliasSeq!(_Point(E.min), _Point(E.max, true));
+    else // Possible if `OriginalType!E == ulong`.
+        alias _getPoints = AliasSeq!(_Point(long.min), _Point(E.max, true), _Point(E.min));
+}
+
+package template _unite(enums...) {
+    import std.conv: to;
+    import std.meta: staticMap, staticSort;
+
+    alias events = staticSort!(_cmpPoints, staticMap!(_getPoints, enums));
+    static foreach (j, p; events[1 .. $])
+        static assert(p.closed != events[j].closed,
+            "Enums' ranges overlap: value `" ~ p.pos.to!string ~ "` is defined in multiple enums",
+        );
+    alias _unite = _merge!enums;
+}
+
+unittest {
+    enum A { a, b, c }
+    enum B { x = 10, y, z }
+
+    assert(_unite!(A, B)(`a`) == `a=0,b=1,c=2,x=10,y=11,z=12,`);
+}
+
+static if (__VERSION__ >= 2_082)
+unittest {
+    mixin(q{
+        enum A { a, @B c = -2, b = 4 }
+        enum B { d = -10, e, @A f = -3 }
+    });
+    assert(_unite!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
+}
+
+unittest {
+    enum WrapsAround: ulong { a = 0, b = long.max + 1 }
+    enum A: ulong { x = 1, y = 2 }
+    enum B: ulong { x = -2, y = 0 }
+    enum C: ulong { x = -2, y = -1 }
+
+    static assert(!__traits(compiles, _unite!(A, WrapsAround)(`a`)));
+    static assert(!__traits(compiles, _unite!(B, WrapsAround)(`a`)));
+    assert(_unite!(C, WrapsAround)(`a`) ==
+        `x=18446744073709551614,y=18446744073709551615,a=0,b=9223372036854775808,`,
+    );
+}
+
+unittest {
+    enum NonPositive: long { a = 0, b = long.max + 1 }
+    enum A: long { x = 1, y = 2 }
+    enum B: long { x = -2, y = 0 }
+    enum C: long { x = -2, y = -1 }
+
+    assert(_unite!(A, NonPositive)(`a`) == `x=1,y=2,a=0,b=-9223372036854775808,`);
+    static assert(!__traits(compiles, _unite!(B, NonPositive)(`a`)));
+    static assert(!__traits(compiles, _unite!(C, NonPositive)(`a`)));
+}
+
 struct _ConcatResult {
     string str;
     long offset;
@@ -106,46 +201,4 @@ unittest {
         enum B { x, y = -1, @A z, @A @B w = z }
     });
     assert(_concatInitLast!(A, B)(`a`) == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`);
-}
-
-package string _unite(enums...)(in string prefix) {
-    import std.algorithm.sorting: sort;
-    import std.conv: to;
-    import std.typecons: Tuple;
-
-    alias Point = Tuple!(long, bool);
-    string result;
-    Point[ ] events;
-    static foreach (i, e; enums) {{
-        static if (!is(e E))
-            alias E = typeof(e);
-        static if (long(E.min) > long(E.max)) // Possible if `OriginalType!E == ulong`.
-            events ~= Point(long.min, false); // Initially open.
-        events ~= Point(E.min, false);
-        events ~= Point(E.max, true);
-        result ~= _generateOne!E(prefix._injectIndex(i), 0);
-    }}
-
-    events.sort();
-    foreach (j, p; events[1 .. $])
-        assert(p[1] != events[j][1],
-            "Enums' ranges overlap: value `" ~ p[0].to!string ~ "` is defined in multiple enums",
-        );
-    return result;
-}
-
-unittest {
-    enum A { a, b, c }
-    enum B { x = 10, y, z }
-
-    assert(_unite!(A, B)(`a`) == `a=0,b=1,c=2,x=10,y=11,z=12,`);
-}
-
-static if (__VERSION__ >= 2_082)
-unittest {
-    mixin(q{
-        enum A { a, @B c = -2, b = 4 }
-        enum B { d = -10, e, @A f = -3 }
-    });
-    assert(_unite!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
 }
