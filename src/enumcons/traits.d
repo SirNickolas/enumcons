@@ -48,3 +48,18 @@ unittest {
 alias _memberNames(alias e) = __traits(allMembers, _TypeOf!e);
 alias _OriginalType(alias x) = OriginalType!(_TypeOf!x);
 alias _CommonType(enums...) = CommonType!(staticMap!(_OriginalType, enums));
+
+private struct _supertypeOf(E);
+
+alias _declareSupertypeOf(alias sub) = _supertypeOf!(_TypeOf!sub);
+
+private template _isSupertypeOf(E) {
+    enum _isSupertypeOf(alias Uda) = is(Uda == _supertypeOf!E);
+}
+
+public template isEnumSafelyConvertible(From, To) if (is(From == enum) && is(To == enum)) {
+    import std.meta: anySatisfy;
+
+    // TODO: Implement recursive check.
+    enum isEnumSafelyConvertible = anySatisfy!(_isSupertypeOf!From, __traits(getAttributes, To));
+}

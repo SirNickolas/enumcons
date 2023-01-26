@@ -1,6 +1,6 @@
 module enumcons.def;
 
-import std.meta: allSatisfy, staticMap;
+import std.meta: allSatisfy;
 import enumcons.generators;
 import enumcons.traits;
 public import enumcons.traits: unknownValue;
@@ -18,6 +18,7 @@ nothrow pure @safe @nogc:
 
 private template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
+    import std.meta: staticMap;
     import std.traits: EnumMembers;
 
     static assert(!is(Base == enum),
@@ -32,7 +33,8 @@ private template _Enum(alias generateMembers, Base, enums...) {
             static if (__traits(getAttributes, member).length)
                 mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
     mixin(
-        `@(__traits(getAttributes, _TypeOf!(enums[$ - 1])))
+        `@(staticMap!(_declareSupertypeOf, enums))
+        @(__traits(getAttributes, _TypeOf!(enums[$ - 1])))
         enum _Enum: Base {`, generateMembers!enums(prefix), '}'
     );
 }
@@ -76,6 +78,11 @@ unittest {
     static assert(ExtendedColor.grey == ExtendedColor.gray);
     static assert(int(ExtendedColor.min) == Color.min);
     static assert(int(ExtendedColor.init) == Color.init);
+
+    static assert(isEnumSafelyConvertible!(Color, ExtendedColor));
+    static assert(isEnumSafelyConvertible!(MoreColors, ExtendedColor));
+    static assert(!isEnumSafelyConvertible!(ExtendedColor, Color));
+    static assert(!isEnumSafelyConvertible!(ExtendedColor, MoreColors));
 }
 
 /// Like `ConcatWithBase`, except that the resulting enum's `.init` value will be that of the last
@@ -104,6 +111,11 @@ unittest {
     static assert(C.a1 == 1);
     static assert(C.b0 == 2);
     static assert(C.b1 == 3);
+
+    static assert(isEnumSafelyConvertible!(A, C));
+    static assert(isEnumSafelyConvertible!(B, C));
+    static assert(!isEnumSafelyConvertible!(C, A));
+    static assert(!isEnumSafelyConvertible!(C, B));
 
     alias D = ConcatInitLast!(A, B.b1);
     // `b1` does not become `.init`; it becomes `@unknownValue`.
@@ -138,6 +150,11 @@ unittest {
     static assert(C.x == 1000);
     static assert(C.y == 1001);
     static assert(C.init == C.a);
+
+    static assert(isEnumSafelyConvertible!(A, C));
+    static assert(isEnumSafelyConvertible!(B, C));
+    static assert(!isEnumSafelyConvertible!(C, A));
+    static assert(!isEnumSafelyConvertible!(C, B));
 }
 
 ///
@@ -185,4 +202,9 @@ unittest {
     static assert(C.y == C.c);
     static assert(C.z == 3);
     static assert(C.init == C.a);
+
+    static assert(isEnumSafelyConvertible!(A, C));
+    static assert(isEnumSafelyConvertible!(B, C));
+    static assert(!isEnumSafelyConvertible!(C, A));
+    static assert(!isEnumSafelyConvertible!(C, B));
 }
