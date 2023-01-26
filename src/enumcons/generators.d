@@ -34,12 +34,12 @@ string _injectIndex(in string prefix, size_t i) {
     return '@' ~ prefix ~ i.to!string ~ '_';
 }
 
-package string _merge(enums...)(in string prefix) {
-    import enumcons.traits: _TypeOf;
+package string merge(enums...)(in string prefix) {
+    import enumcons.utils: TypeOf;
 
     string result;
     static foreach (i, e; enums)
-        result ~= _generateOne!(_TypeOf!e)(prefix._injectIndex(i), 0);
+        result ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i), 0);
     return result;
 }
 
@@ -47,7 +47,9 @@ unittest {
     enum A { a, b, c }
     enum B { x, y = 2, z }
 
-    assert(_merge!(A, B)(`a`) == `a=0,b=1,c=2,x=0,y=2,z=3,`);
+    assert(merge!(A, B)(`a`) == `a=0,b=1,c=2,x=0,y=2,z=3,`);
+    assert(merge!A(`a`) == `a=0,b=1,c=2,`);
+    assert(merge(`a`) == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -56,7 +58,7 @@ unittest {
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
     });
-    assert(_merge!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
+    assert(merge!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=3,`);
 }
 
 struct _Point {
@@ -77,23 +79,28 @@ template _getPoints(e) {
         alias _getPoints = AliasSeq!(_Point(long.min), _Point(E.max, true), _Point(E.min));
 }
 
-package template _unite(enums...) {
-    import std.conv: to;
-    import std.meta: staticMap, staticSort;
+package template unite(enums...) {
+    static if (enums.length) {
+        import std.conv: to;
+        import std.meta: staticMap, staticSort;
 
-    alias events = staticSort!(_cmpPoints, staticMap!(_getPoints, enums));
-    static foreach (j, p; events[1 .. $])
-        static assert(p.closed != events[j].closed,
-            "Enums' ranges overlap: value `" ~ p.pos.to!string ~ "` is defined in multiple enums",
-        );
-    alias _unite = _merge!enums;
+        alias events = staticSort!(_cmpPoints, staticMap!(_getPoints, enums));
+        static foreach (j, p; events[1 .. $])
+            static assert(p.closed != events[j].closed, // Must not have two `open` events in a row.
+                "Enums' ranges overlap: value `" ~ p.pos.to!string ~
+                "` is defined in multiple enums",
+            );
+    }
+    alias unite = merge!enums;
 }
 
 unittest {
     enum A { a, b, c }
     enum B { x = 10, y, z }
 
-    assert(_unite!(A, B)(`a`) == `a=0,b=1,c=2,x=10,y=11,z=12,`);
+    assert(unite!(A, B)(`a`) == `a=0,b=1,c=2,x=10,y=11,z=12,`);
+    assert(unite!A(`a`) == `a=0,b=1,c=2,`);
+    assert(unite(`a`) == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -102,7 +109,7 @@ unittest {
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
     });
-    assert(_unite!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
+    assert(unite!(A, B)(`a`) == `a=0,@a0_1 c=-2,b=4,d=-10,e=-9,@a1_2 f=-3,`);
 }
 
 unittest {
@@ -111,9 +118,9 @@ unittest {
     enum B: ulong { x = -2, y = 0 }
     enum C: ulong { x = -2, y = -1 }
 
-    static assert(!__traits(compiles, _unite!(A, WrapsAround)(`a`)));
-    static assert(!__traits(compiles, _unite!(B, WrapsAround)(`a`)));
-    assert(_unite!(C, WrapsAround)(`a`) ==
+    static assert(!__traits(compiles, unite!(A, WrapsAround)(`a`)));
+    static assert(!__traits(compiles, unite!(B, WrapsAround)(`a`)));
+    assert(unite!(C, WrapsAround)(`a`) ==
         `x=18446744073709551614,y=18446744073709551615,a=0,b=9223372036854775808,`,
     );
 }
@@ -124,9 +131,9 @@ unittest {
     enum B: long { x = -2, y = 0 }
     enum C: long { x = -2, y = -1 }
 
-    assert(_unite!(A, NonPositive)(`a`) == `x=1,y=2,a=0,b=-9223372036854775808,`);
-    static assert(!__traits(compiles, _unite!(B, NonPositive)(`a`)));
-    static assert(!__traits(compiles, _unite!(C, NonPositive)(`a`)));
+    assert(unite!(A, NonPositive)(`a`) == `x=1,y=2,a=0,b=-9223372036854775808,`);
+    static assert(!__traits(compiles, unite!(B, NonPositive)(`a`)));
+    static assert(!__traits(compiles, unite!(C, NonPositive)(`a`)));
 }
 
 struct _ConcatResult {
@@ -148,7 +155,7 @@ _ConcatResult _concatImpl(enums...)(in string prefix) {
     return _ConcatResult(str, offset);
 }
 
-package string _concat(enums...)(in string prefix) {
+package string concat(enums...)(in string prefix) {
     return _concatImpl!enums(prefix).str;
 }
 
@@ -156,9 +163,9 @@ unittest {
     enum A { a, b = -1, c, d }
     enum B { x, y = -1, z, w = z }
 
-    assert(_concat!(A, B)(`a`) == `a=0,b=-1,c=0,d=1,x=3,y=2,z=3,w=3,`);
-    assert(_concat!A(`a`) == `a=0,b=-1,c=0,d=1,`);
-    assert(_concat(`a`) == ``);
+    assert(concat!(A, B)(`a`) == `a=0,b=-1,c=0,d=1,x=3,y=2,z=3,w=3,`);
+    assert(concat!A(`a`) == `a=0,b=-1,c=0,d=1,`);
+    assert(concat(`a`) == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -167,17 +174,17 @@ unittest {
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(_concat!(A, B)(`a`) == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
+    assert(concat!(A, B)(`a`) == `a=0,@a0_1 b=-1,c=0,d=1,x=3,y=2,@a1_2 z=3,@a1_3 w=3,`);
 }
 
-package string _concatInitLast(enums...)(in string prefix) {
+package string concatInitLast(enums...)(in string prefix) {
     static if (enums.length <= 1)
         return _concatImpl!enums(prefix).str;
     else {
-        import enumcons.traits: _TypeOf;
+        import enumcons.utils: TypeOf;
 
         const leading = _concatImpl!(enums[0 .. $ - 1])(prefix);
-        alias Last = _TypeOf!(enums[$ - 1]);
+        alias Last = TypeOf!(enums[$ - 1]);
         return _generateOne!Last(
             prefix._injectIndex(enums.length - 1),
             leading.offset - Last.min,
@@ -189,9 +196,9 @@ unittest {
     enum A { a, b = -1, c, d }
     enum B { x, y = -1, z, w = z }
 
-    assert(_concatInitLast!(A, B)(`a`) == `x=3,y=2,z=3,w=3,a=0,b=-1,c=0,d=1,`);
-    assert(_concatInitLast!A(`a`) == `a=0,b=-1,c=0,d=1,`);
-    assert(_concatInitLast(`a`) == ``);
+    assert(concatInitLast!(A, B)(`a`) == `x=3,y=2,z=3,w=3,a=0,b=-1,c=0,d=1,`);
+    assert(concatInitLast!A(`a`) == `a=0,b=-1,c=0,d=1,`);
+    assert(concatInitLast(`a`) == ``);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -200,5 +207,5 @@ unittest {
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(_concatInitLast!(A, B)(`a`) == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`);
+    assert(concatInitLast!(A, B)(`a`) == `x=3,y=2,@a1_2 z=3,@a1_3 w=3,a=0,@a0_1 b=-1,c=0,d=1,`);
 }

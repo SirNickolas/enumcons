@@ -1,11 +1,11 @@
 module enumcons.def;
 
 import std.meta: allSatisfy;
-import enumcons.generators;
-import enumcons.traits;
-public import enumcons.traits: unknownValue;
+import enumcons.generators: concat, concatInitLast, merge, unite;
+import enumcons.utils: TypeOf, declareSupertypeOf;
+public import enumcons.utils: unknownValue;
 
-nothrow pure @safe @nogc:
+private nothrow pure @safe @nogc:
 
 // template Concat(...)
 // template Unite(...)
@@ -16,7 +16,9 @@ nothrow pure @safe @nogc:
 // combined.assertTo!Source // `AssertError` if lossless conversion is not possible.
 // combined.tryTo!Source // `ConvException` if lossless conversion is not possible.
 
-private template _Enum(alias generateMembers, Base, enums...) {
+alias _memberNames(alias e) = __traits(allMembers, TypeOf!e);
+
+template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
     import std.meta: staticMap;
     import std.traits: EnumMembers;
@@ -29,30 +31,66 @@ private template _Enum(alias generateMembers, Base, enums...) {
     enum prefix = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
     // TODO: Drop `@unknownValue` attributes from source enums.
     static foreach (i, e; enums)
-        static foreach (j, member; EnumMembers!(_TypeOf!e))
+        static foreach (j, member; EnumMembers!(TypeOf!e))
             static if (__traits(getAttributes, member).length)
                 mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
     mixin(
-        `@(staticMap!(_declareSupertypeOf, enums))
-        @(__traits(getAttributes, _TypeOf!(enums[$ - 1])))
+        `@(staticMap!(declareSupertypeOf, enums))
+        @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {`, generateMembers!enums(prefix), '}'
     );
 }
 
-template Concat(enums...)
+enum _isEnumOrEnumMember(alias x) = is(x == enum) || is(typeof(x) == enum);
+
+unittest {
+    enum I { a }
+    enum C { a = 'x' }
+    enum R { a = 1.5 }
+    enum S { a = "x" }
+
+    static assert(_isEnumOrEnumMember!I);
+    static assert(_isEnumOrEnumMember!(I.a));
+    static assert(_isEnumOrEnumMember!C);
+    static assert(_isEnumOrEnumMember!(C.a));
+    static assert(_isEnumOrEnumMember!R);
+    static assert(_isEnumOrEnumMember!(R.a));
+    static assert(_isEnumOrEnumMember!S);
+    static assert(_isEnumOrEnumMember!(S.a));
+
+    static assert(!_isEnumOrEnumMember!bool);
+    static assert(!_isEnumOrEnumMember!true);
+}
+
+template _OriginalType(alias x) {
+    import std.traits: OriginalType;
+
+    alias _OriginalType = OriginalType!(TypeOf!x);
+}
+
+template _CommonType(enums...) {
+    import std.meta: staticMap;
+    import std.traits: CommonType;
+
+    alias _CommonType = CommonType!(staticMap!(_OriginalType, enums));
+}
+
+public template Concat(enums...)
 if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
-    alias Concat = _Enum!(_concat, _CommonType!enums, enums);
+    alias Concat = _Enum!(concat, _CommonType!enums, enums);
 }
 
 /// ditto
-template ConcatWithBase(Base, enums...)
+public template ConcatWithBase(Base, enums...)
 if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
-    alias ConcatWithBase = _Enum!(_concat, Base, enums);
+    alias ConcatWithBase = _Enum!(concat, Base, enums);
 }
 
 ///
 unittest {
+    import enumcons.traits: isEnumSafelyConvertible;
+
     @unknownValue(`_`) // All versions of D.
     enum Color {
         /+@unknownValue+/ _, // 2.082+
@@ -88,20 +126,22 @@ unittest {
 /// Like `ConcatWithBase`, except that the resulting enum's `.init` value will be that of the last
 /// passed argument, not first. In every other aspect, including the numbering scheme, they are
 /// exactly the same.
-template ConcatInitLast(enums...)
+public template ConcatInitLast(enums...)
 if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
-    alias ConcatInitLast = _Enum!(_concatInitLast, _CommonType!enums, enums);
+    alias ConcatInitLast = _Enum!(concatInitLast, _CommonType!enums, enums);
 }
 
 /// ditto
-template ConcatWithBaseInitLast(Base, enums...)
+public template ConcatWithBaseInitLast(Base, enums...)
 if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
-    alias ConcatWithBaseInitLast = _Enum!(_concatInitLast, Base, enums);
+    alias ConcatWithBaseInitLast = _Enum!(concatInitLast, Base, enums);
 }
 
 ///
 unittest {
+    import enumcons.traits: isEnumSafelyConvertible;
+
     enum A { a0, a1 }
     enum B { b0, b1 }
 
@@ -125,20 +165,22 @@ unittest {
     static assert(D.b0 == A.a1 + 1);
 }
 
-template Unite(enums...)
+public template Unite(enums...)
 if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
-    alias Unite = _Enum!(_unite, _CommonType!enums, enums);
+    alias Unite = _Enum!(unite, _CommonType!enums, enums);
 }
 
 /// ditto
-template UniteWithBase(Base, enums...)
+public template UniteWithBase(Base, enums...)
 if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
-    alias UniteWithBase = _Enum!(_unite, Base, enums);
+    alias UniteWithBase = _Enum!(unite, Base, enums);
 }
 
 ///
 unittest {
+    import enumcons.traits: isEnumSafelyConvertible;
+
     enum A { a = 1, b = 2, c = 10 }
     enum B { x = 1000, y }
     alias C = Unite!(A, B);
@@ -176,20 +218,22 @@ unittest {
     static assert(!is(Unite!(A, B)));
 }
 
-template Merge(enums...)
+public template Merge(enums...)
 if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
     // `enums.length >= 1` because `__traits(isIntegral)` would have returned `false` otherwise.
-    alias Merge = _Enum!(_merge, _CommonType!enums, enums);
+    alias Merge = _Enum!(merge, _CommonType!enums, enums);
 }
 
 /// ditto
-template MergeWithBase(Base, enums...)
+public template MergeWithBase(Base, enums...)
 if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
-    alias MergeWithBase = _Enum!(_merge, Base, enums);
+    alias MergeWithBase = _Enum!(merge, Base, enums);
 }
 
 ///
 unittest {
+    import enumcons.traits: isEnumSafelyConvertible;
+
     enum A { a, b, c }
     enum B { x = 1, y, z }
     alias C = Merge!(A, B);
