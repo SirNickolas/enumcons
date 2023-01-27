@@ -37,7 +37,7 @@ string _generateOne(E)(in string attrPrefix, long offset) {
 unittest {
     enum E { b, c, a, d = -4, e, f = 10, g, h = 1 }
 
-    assert(_generateOne!E(`@b0LU_`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
+    assert(_generateOne!E(`@b0LU`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -48,21 +48,17 @@ unittest {
 
     static if (__VERSION__ < 2_092)
         version (D_LP64)
-            assert(_generateOne!E(`@f0LU_`, 1) ==
-                `f=1,a=2,@f0LU_2LU0LU b=-1,c=0,d=1,@f0LU_5LU0LU@f0LU_5LU1LU e=3,`,
+            assert(_generateOne!E(`@f0LU`, 1) ==
+                `f=1,a=2,@f0LU2LU0LU b=-1,c=0,d=1,@f0LU5LU0LU@f0LU5LU1LU e=3,`,
             );
         else
-            assert(_generateOne!E(`@f0u_`, 1) ==
-                `f=1,a=2,@f0u_2u0u b=-1,c=0,d=1,@f0u_5u0u@f0u_5u1u e=3,`,
+            assert(_generateOne!E(`@f0u`, 1) ==
+                `f=1,a=2,@f0u2u0u b=-1,c=0,d=1,@f0u5u0u@f0u5u1u e=3,`,
             );
     else version (D_LP64)
-        assert(_generateOne!E(`@f0LU_`, 1) == `f=1,a=2,@f0LU_2LU b=-1,c=0,d=1,@f0LU_5LU e=3,`);
+        assert(_generateOne!E(`@f0LU`, 1) == `f=1,a=2,@f0LU2LU b=-1,c=0,d=1,@f0LU5LU e=3,`);
     else
-        assert(_generateOne!E(`@f0u_`, 1) == `f=1,a=2,@f0u_2u b=-1,c=0,d=1,@f0u_5u e=3,`);
-}
-
-string _injectIndex(in string prefix, in string i) {
-    return '@' ~ prefix ~ i ~ '_';
+        assert(_generateOne!E(`@f0u`, 1) == `f=1,a=2,@f0u2u b=-1,c=0,d=1,@f0u5u e=3,`);
 }
 
 package GenResult merge(enums...)(in string prefix) {
@@ -70,7 +66,7 @@ package GenResult merge(enums...)(in string prefix) {
 
     string code;
     static foreach (i, e; enums)
-        code ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i.stringof), 0);
+        code ~= _generateOne!(TypeOf!e)('@' ~ prefix ~ i.stringof, 0);
     return GenResult(code, new long[enums.length], enums.length <= 1);
 }
 
@@ -93,9 +89,9 @@ unittest {
     static assert(__traits(getAttributes, B.f).length);
 
     version (D_LP64)
-        assert(merge!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=3,`);
+        assert(merge!(A, B)(`a`).code == `a=0,@a0LU1LU c=-2,b=4,d=-10,e=-9,@a1LU2LU f=3,`);
     else
-        assert(merge!(A, B)(`a`).code == `a=0,@a0u_1u c=-2,b=4,d=-10,e=-9,@a1u_2u f=3,`);
+        assert(merge!(A, B)(`a`).code == `a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=3,`);
 }
 
 struct _Point {
@@ -153,9 +149,9 @@ unittest {
     static assert(__traits(getAttributes, B.f).length);
 
     version (D_LP64)
-        assert(unite!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=-3,`);
+        assert(unite!(A, B)(`a`).code == `a=0,@a0LU1LU c=-2,b=4,d=-10,e=-9,@a1LU2LU f=-3,`);
     else
-        assert(unite!(A, B)(`a`).code == `a=0,@a0u_1u c=-2,b=4,d=-10,e=-9,@a1u_2u f=-3,`);
+        assert(unite!(A, B)(`a`).code == `a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=-3,`);
 }
 
 unittest {
@@ -193,7 +189,7 @@ package GenResult concat(enums...)(in string prefix) {
             alias E = typeof(e);
         static if (i)
             offset -= E.min;
-        code ~= _generateOne!E(prefix._injectIndex(i.stringof), offset);
+        code ~= _generateOne!E('@' ~ prefix ~ i.stringof, offset);
         offset += E.max + 1L;
         offsets[i + 1] = offset;
     }}
@@ -221,11 +217,11 @@ unittest {
 
     version (D_LP64)
         assert(concat!(A, B)(`a`).code ==
-            `a=0,@a0LU_1LU b=-1,c=0,d=1,x=4,y=2,@a1LU_2LU z=3,@a1LU_3LU w=5,`,
+            `a=0,@a0LU1LU b=-1,c=0,d=1,x=4,y=2,@a1LU2LU z=3,@a1LU3LU w=5,`,
         );
     else
         assert(concat!(A, B)(`a`).code ==
-            `a=0,@a0u_1u b=-1,c=0,d=1,x=4,y=2,@a1u_2u z=3,@a1u_3u w=5,`,
+            `a=0,@a0u1u b=-1,c=0,d=1,x=4,y=2,@a1u2u z=3,@a1u3u w=5,`,
         );
 }
 
@@ -240,7 +236,7 @@ package template concatInitLast(enums...) {
             auto result = concat!(enums[0 .. n])(prefix);
             alias Last = TypeOf!(enums[n]);
             result.code = _generateOne!Last(
-                prefix._injectIndex(n.stringof),
+                '@' ~ prefix ~ n.stringof,
                 result.offsets[n] - Last.min,
             ) ~ result.code;
             return result;
@@ -268,10 +264,10 @@ unittest {
 
     version (D_LP64)
         assert(concatInitLast!(A, B)(`a`).code ==
-            `x=4,y=2,@a1LU_2LU z=3,@a1LU_3LU w=5,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
+            `x=4,y=2,@a1LU2LU z=3,@a1LU3LU w=5,a=0,@a0LU1LU b=-1,c=0,d=1,`,
         );
     else
         assert(concatInitLast!(A, B)(`a`).code ==
-            `x=4,y=2,@a1u_2u z=3,@a1u_3u w=5,a=0,@a0u_1u b=-1,c=0,d=1,`,
+            `x=4,y=2,@a1u2u z=3,@a1u3u w=5,a=0,@a0u1u b=-1,c=0,d=1,`,
         );
 }

@@ -37,7 +37,7 @@ template _Enum(alias generateMembers, Base, enums...) {
             static if (__traits(getAttributes, __traits(getMember, E, memberName)).length) {
                 static if (__VERSION__ >= 2_092)
                 mixin(
-                    `alias ` ~ prefix ~ i.stringof ~ '_' ~ j.stringof ~
+                    `alias ` ~ prefix ~ i.stringof ~ j.stringof ~
                     ` = __traits(getAttributes, E.` ~ memberName ~ `);`
                 );
                 else {
@@ -46,7 +46,7 @@ template _Enum(alias generateMembers, Base, enums...) {
                     static foreach (k, attr;
                         __traits(getAttributes, __traits(getMember, E, memberName))
                     ) mixin(
-                        `alias ` ~ prefix ~ i.stringof ~ '_' ~ j.stringof ~ k.stringof ~ ` = attr;`
+                        `alias ` ~ prefix ~ i.stringof ~ j.stringof ~ k.stringof ~ ` = attr;`
                     );
                 }
             }
