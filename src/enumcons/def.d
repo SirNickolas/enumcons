@@ -64,11 +64,13 @@ template _Enum(alias generateMembers, Base, enums...) {
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {` ~ generated.code ~ '}'
     );
-    // Access all attributes of the newly created enum. Without that, D <2.093 resolves their
-    // identifiers in a wrong scope.
-    static if (__VERSION__ < 2_093)
-        static foreach (j, memberName; __traits(allMembers, _Enum))
+
+    static if (__VERSION__ < 2_093) {
+        // Access all attributes of the newly created enum. Without that, D <2.093 resolves their
+        // identifiers in a wrong scope.
+        static foreach (memberName; __traits(allMembers, _Enum))
             static if (__traits(getAttributes, __traits(getMember, _Enum, memberName)).length) { }
+    }
 }
 
 enum _isEnumOrEnumMember(alias x) = is(x == enum) || is(typeof(x) == enum);
