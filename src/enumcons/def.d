@@ -89,7 +89,8 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template ConcatWithBase(Base, enums...) if (
+public template ConcatWithBase(Base, enums...)
+if (
     enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
     allSatisfy!(_isEnumOrEnumMember, enums)
 ) {
@@ -142,7 +143,8 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template ConcatWithBaseInitLast(Base, enums...) if (
+public template ConcatWithBaseInitLast(Base, enums...)
+if (
     enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
     allSatisfy!(_isEnumOrEnumMember, enums)
 ) {
@@ -183,7 +185,8 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template UniteWithBase(Base, enums...) if (
+public template UniteWithBase(Base, enums...)
+if (
     enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
     allSatisfy!(_isEnumOrEnumMember, enums)
 ) {
@@ -238,7 +241,8 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template MergeWithBase(Base, enums...) if (
+public template MergeWithBase(Base, enums...)
+if (
     enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
     allSatisfy!(_isEnumOrEnumMember, enums)
 ) {

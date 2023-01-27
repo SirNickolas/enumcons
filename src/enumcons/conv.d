@@ -1,10 +1,11 @@
 module enumcons.conv;
 
-import enumcons.traits: isEnumSafelyConvertible;
+import enumcons.traits: isEnumSafelyConvertible, isEnumSubtype;
 
 pure @safe:
 
-To as(To, From)(From e) nothrow @nogc if (isEnumSafelyConvertible!(From, To)) {
+To as(To, From)(From e) nothrow @nogc
+if (is(From == enum) && __traits(isIntegral, From, To) && isEnumSafelyConvertible!(From, To)) {
     static if (is(From: To))
         return e;
     else {
@@ -46,4 +47,31 @@ nothrow @nogc unittest {
     static assert(!__traits(compiles, C.a.as!B));
     static assert(!__traits(compiles, C.d.as!A));
     static assert(!__traits(compiles, C.d.as!B));
+}
+
+bool is_(Sub, Super)(Super e) nothrow @nogc
+if (
+    is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super) &&
+    isEnumSubtype!(Sub, Super)
+) {
+    import enumcons.utils: offsetForUpcast;
+
+    enum long offset = offsetForUpcast!(Sub, Super) + Sub.min;
+    // TODO: Optimize.
+    return e - offset <= ulong(Sub.max - Sub.min);
+}
+
+nothrow @nogc unittest {
+    import enumcons.def;
+
+    enum A { a = 4 }
+    enum B { b }
+    alias C = Concat!(A, B);
+
+    assert(C.a.is_!A);
+    assert(C.b.is_!B);
+    assert(!C.a.is_!B);
+    assert(!C.b.is_!A);
+    static assert(!__traits(compiles, A.a.is_!B));
+    static assert(!__traits(compiles, A.a.is_!C));
 }
