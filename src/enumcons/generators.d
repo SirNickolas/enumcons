@@ -59,14 +59,16 @@ unittest {
     assert(merge(`a`).code == ``);
 }
 
-version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
     });
-    assert(merge!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=3,`);
+    version (D_LP64)
+        assert(merge!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=3,`);
+    else
+        assert(merge!(A, B)(`a`).code == `a=0,@a0u_1u c=-2,b=4,d=-10,e=-9,@a1u_2u f=3,`);
 }
 
 struct _Point {
@@ -114,14 +116,16 @@ unittest {
     assert(unite(`a`).code == ``);
 }
 
-version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
     });
-    assert(unite!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=-3,`);
+    version (D_LP64)
+        assert(unite!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=-3,`);
+    else
+        assert(unite!(A, B)(`a`).code == `a=0,@a0u_1u c=-2,b=4,d=-10,e=-9,@a1u_2u f=-3,`);
 }
 
 unittest {
@@ -175,16 +179,20 @@ unittest {
     assert(concat(`a`).code == ``);
 }
 
-version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(
-        concat!(A, B)(`a`).code == `a=0,@a0LU_1LU b=-1,c=0,d=1,x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,`
-    );
+    version (D_LP64)
+        assert(concat!(A, B)(`a`).code ==
+            `a=0,@a0LU_1LU b=-1,c=0,d=1,x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,`,
+        );
+    else
+        assert(concat!(A, B)(`a`).code ==
+            `a=0,@a0u_1u b=-1,c=0,d=1,x=3,y=2,@a1u_2u z=3,@a1u_3u w=3,`,
+        );
 }
 
 package template concatInitLast(enums...) {
@@ -214,14 +222,18 @@ unittest {
     assert(concatInitLast(`a`).code == ``);
 }
 
-version (D_LP64)
 static if (__VERSION__ >= 2_082)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -1, @A z, @A @B w = z }
     });
-    assert(concatInitLast!(A, B)(`a`).code ==
-        `x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
-    );
+    version (D_LP64)
+        assert(concatInitLast!(A, B)(`a`).code ==
+            `x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
+        );
+    else
+        assert(concatInitLast!(A, B)(`a`).code ==
+            `x=3,y=2,@a1u_2u z=3,@a1u_3u w=3,a=0,@a0u_1u b=-1,c=0,d=1,`,
+        );
 }
