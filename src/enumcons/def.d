@@ -57,8 +57,10 @@ template _Enum(alias generateMembers, Base, enums...) {
     static assert(Base.sizeof <= 8, "`cent` and `ucent` enums are unsupported");
 
     enum generated = generateMembers!enums(prefix);
+    enum offsets = generated.offsets; // D <2.078 requires dedicated variables for them.
+    enum allowDowncast = generated.allowDowncast;
     mixin(
-        `@(declareSupertype!(generated.offsets, generated.allowDowncast, enums))
+        `@(declareSupertype!(offsets, allowDowncast, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {` ~ generated.code ~ '}'
     );

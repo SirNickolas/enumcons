@@ -134,12 +134,9 @@ version (D_Exceptions) {
         assertThrown!EnumConvException(C.a.tryTo!B);
         assertThrown!EnumConvException(C.b.tryTo!A);
     }
-} else {
-    @disable class EnumConvException;
-
+} else
     @disable To tryTo(To, From)(From)
     if (
         is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
         isEnumPossiblyConvertible!(From, To)
     );
-}
