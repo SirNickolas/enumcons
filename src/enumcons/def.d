@@ -42,7 +42,7 @@ template _Enum(alias generateMembers, Base, enums...) {
 
     enum generated = generateMembers!enums(prefix);
     mixin(
-        `@(declareSupertype!(generated.offsets, enums))
+        `@(declareSupertype!(generated.offsets, generated.allowDowncast, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {`, generated.code, '}'
     );

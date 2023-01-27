@@ -46,12 +46,13 @@ else // Simple but slow.
 
 struct _HasSubtype(E) {
     long offset;
+    bool allowDowncast;
 }
 
-package template declareSupertype(immutable(long)[ ] offsets, subtypes...) {
+package template declareSupertype(immutable(long)[ ] offsets, bool allowDowncast, subtypes...) {
     import std.traits: Unqual;
 
-    enum udaFor(size_t i, alias sub) = _HasSubtype!(Unqual!(TypeOf!sub))(offsets[i]);
+    enum udaFor(size_t i, alias sub) = _HasSubtype!(Unqual!(TypeOf!sub))(offsets[i], allowDowncast);
     alias declareSupertype = staticMapI!(udaFor, subtypes);
 }
 
@@ -60,35 +61,38 @@ unittest {
     enum B { c, d }
 
     static assert(
-        declareSupertype!([0, 2], A, B.d) == AliasSeq!(_HasSubtype!A(0), _HasSubtype!B(2)),
+        declareSupertype!([0, 2], false, A, B.d) == AliasSeq!(_HasSubtype!A(0), _HasSubtype!B(2)),
     );
 }
 
-long _calcOffsetForUpcast(From, Mid)(_HasSubtype!Mid proof) {
-    return proof.offset + _offsetForUpcast!(From, Mid);
+package alias SubtypeInfo = _HasSubtype!void;
+
+SubtypeInfo _calcSubtypeInfo(From, Mid)(_HasSubtype!Mid proof) {
+    enum next = _subtypeInfo!(From, Mid);
+    return SubtypeInfo(proof.offset + next.offset, proof.allowDowncast & next.allowDowncast);
 }
 
 /// Recursively search for `From` in `To`'s descendants and return the offset that needs to be
 /// added to a value to convert it from `From` to `To`.
-template _offsetForUpcast(From, To) {
+template _subtypeInfo(From, To) {
     static if (is(From == To))
-        enum _offsetForUpcast = 0L; // Don't need to modify the value.
+        enum _subtypeInfo = SubtypeInfo(0, true); // Don't modify the value; allow downcasting.
     else {
         // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
-        // always assigned correctly. An enum cannot have duplicate members, therefore,
+        // always constructed correctly. An enum cannot have duplicate members, therefore,
         // the relationship graph is actually a tree. And in a tree, there is a single path between
-        // any two nodes. All things considered, `enum _offsetForUpcast` below will be defined
+        // any two nodes. All things considered, `enum _subtypeInfo` below will be defined
         // at most once.
         static foreach (uda; __traits(getAttributes, To))
-            static if (__traits(compiles, _calcOffsetForUpcast!From(uda)))
-                enum _offsetForUpcast = _calcOffsetForUpcast!From(uda);
+            static if (__traits(compiles, _calcSubtypeInfo!From(uda)))
+                enum _subtypeInfo = _calcSubtypeInfo!From(uda);
     }
 }
 
-package template offsetForUpcast(From, To) {
+package template subtypeInfo(From, To) {
     import std.traits: Unqual;
 
-    enum long offsetForUpcast = _offsetForUpcast!(Unqual!From, Unqual!To);
+    enum subtypeInfo = _subtypeInfo!(Unqual!From, Unqual!To);
 }
 
 unittest {
@@ -102,46 +106,46 @@ unittest {
     enum M { m }
     enum X;
 
-    @declareSupertype!([0, 2], A, C)
+    @declareSupertype!([0, 2], true, A, C)
     enum AC { a, b, c }
 
-    @declareSupertype!([0, 3], AC, D)
+    @declareSupertype!([0, 3], true, AC, D)
     enum AD { a, b, c, d }
 
-    @declareSupertype!([0, 1], G, H)
+    @declareSupertype!([0, 1], true, G, H)
     enum GJ { g, h, i, j }
 
-    @declareSupertype!([0, 2], E, GJ)
+    @declareSupertype!([0, 2], true, E, GJ)
     enum EJ { e, f, g, h, i, j}
 
-    @declareSupertype!([0, 6], EJ, K)
+    @declareSupertype!([0, 6], true, EJ, K)
     enum EL { e, f, g, h, i, j, k, l }
 
-    @declareSupertype!([0, 4, 12], AD, EL, M)
+    @declareSupertype!([0, 4, 12], true, AD, EL, M)
     enum AM { a, b, c, d, e, f, g, h, i, j, k, l, m }
 
-    static assert(offsetForUpcast!(A, AC) == 0);
-    static assert(offsetForUpcast!(C, AC) == 2);
-    static assert(offsetForUpcast!(AC, AD) == 0);
-    static assert(offsetForUpcast!(D, AD) == 3);
-    static assert(offsetForUpcast!(A, AD) == 0);
-    static assert(offsetForUpcast!(C, AD) == 2);
-    static assert(offsetForUpcast!(H, GJ) == 1);
-    static assert(offsetForUpcast!(H, EJ) == 3);
-    static assert(offsetForUpcast!(H, EL) == 3);
-    static assert(offsetForUpcast!(H, AM) == 7);
-    static assert(offsetForUpcast!(A, AM) == 0);
-    static assert(offsetForUpcast!(K, AM) == 10);
+    static assert(subtypeInfo!(A, AC).offset == 0);
+    static assert(subtypeInfo!(C, AC).offset == 2);
+    static assert(subtypeInfo!(AC, AD).offset == 0);
+    static assert(subtypeInfo!(D, AD).offset == 3);
+    static assert(subtypeInfo!(A, AD).offset == 0);
+    static assert(subtypeInfo!(C, AD).offset == 2);
+    static assert(subtypeInfo!(H, GJ).offset == 1);
+    static assert(subtypeInfo!(H, EJ).offset == 3);
+    static assert(subtypeInfo!(H, EL).offset == 3);
+    static assert(subtypeInfo!(H, AM).offset == 7);
+    static assert(subtypeInfo!(A, AM).offset == 0);
+    static assert(subtypeInfo!(K, AM).offset == 10);
 
-    static assert(offsetForUpcast!(AM, AM) == 0);
-    static assert(offsetForUpcast!(X, X) == 0);
+    static assert(subtypeInfo!(AM, AM).offset == 0);
+    static assert(subtypeInfo!(X, X).offset == 0);
 
-    static assert(!__traits(compiles, offsetForUpcast!(AC, A)));
-    static assert(!__traits(compiles, offsetForUpcast!(A, C)));
-    static assert(!__traits(compiles, offsetForUpcast!(EJ, D)));
-    static assert(!__traits(compiles, offsetForUpcast!(EJ, E)));
-    static assert(!__traits(compiles, offsetForUpcast!(AD, EL)));
+    static assert(!__traits(compiles, subtypeInfo!(AC, A)));
+    static assert(!__traits(compiles, subtypeInfo!(A, C)));
+    static assert(!__traits(compiles, subtypeInfo!(EJ, D)));
+    static assert(!__traits(compiles, subtypeInfo!(EJ, E)));
+    static assert(!__traits(compiles, subtypeInfo!(AD, EL)));
 
-    static assert(!__traits(compiles, offsetForUpcast!(AD, X)));
-    static assert(!__traits(compiles, offsetForUpcast!(X, AD)));
+    static assert(!__traits(compiles, subtypeInfo!(AD, X)));
+    static assert(!__traits(compiles, subtypeInfo!(X, AD)));
 }

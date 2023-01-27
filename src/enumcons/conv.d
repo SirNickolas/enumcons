@@ -1,6 +1,6 @@
 module enumcons.conv;
 
-import enumcons.traits: isEnumSafelyConvertible, isEnumSubtype;
+import enumcons.traits;
 
 pure @safe:
 
@@ -9,9 +9,9 @@ if (is(From == enum) && __traits(isIntegral, From, To) && isEnumSafelyConvertibl
     static if (is(From: To))
         return e;
     else {
-        import enumcons.utils: offsetForUpcast;
+        import enumcons.utils: subtypeInfo;
 
-        enum long offset = offsetForUpcast!(From, To);
+        enum long offset = subtypeInfo!(From, To).offset;
         static if (!offset)
             return cast(To)e; // To be sure it is optimized no matter how stupid the compiler is.
         else {
@@ -52,11 +52,11 @@ nothrow @nogc unittest {
 bool is_(Sub, Super)(Super e) nothrow @nogc
 if (
     is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super) &&
-    isEnumSubtype!(Sub, Super)
+    isEnumPossiblyConvertible!(Super, Sub)
 ) {
-    import enumcons.utils: offsetForUpcast;
+    import enumcons.utils: subtypeInfo;
 
-    enum long offset = offsetForUpcast!(Sub, Super) + Sub.min;
+    enum long offset = subtypeInfo!(Sub, Super).offset + Sub.min;
     // TODO: Optimize.
     return e - offset <= ulong(Sub.max - Sub.min);
 }
