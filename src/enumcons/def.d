@@ -21,19 +21,25 @@ alias _memberNames(alias e) = __traits(allMembers, TypeOf!e);
 template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
     import std.meta: staticMap;
-    import std.traits: EnumMembers;
+    import std.traits: EnumMembers, OriginalType;
 
-    static assert(!is(Base == enum),
-        "Specifying another enum as a base type for your enum is currently unsupported. " ~
-        "Use `std.traits.{CommonType, OriginalType}`",
-    );
     // Choose the longest member as prefix to avoid name collision.
     enum prefix = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
-    // TODO: Drop `@unknownValue` attributes from source enums.
-    static foreach (i, e; enums)
+    static foreach (i, e; enums) {
+        static assert(e.sizeof <= 8,
+            '`' ~ TypeOf!e.stringof ~ "`'s original type is `" ~ OriginalType!(TypeOf!e).stringof ~
+            "`, which is unsupported",
+        );
+        // TODO: Drop `@unknownValue` attributes from source enums.
         static foreach (j, member; EnumMembers!(TypeOf!e))
             static if (__traits(getAttributes, member).length)
                 mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
+    }
+    // `Base` may be specified explicitly by the user, but it may also be deduced from
+    // the arguments - and will definitely be larger than 8 bytes if one of them is. To give a more
+    // precise error message for the latter case, we check the arguments first.
+    static assert(Base.sizeof <= 8, "`cent` and `ucent` enums are unsupported");
+
     enum generated = generateMembers!enums(prefix);
     mixin(
         `@(declareSupertype!(generated.offsets, enums))
@@ -83,8 +89,10 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template ConcatWithBase(Base, enums...)
-if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+public template ConcatWithBase(Base, enums...) if (
+    enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
+    allSatisfy!(_isEnumOrEnumMember, enums)
+) {
     alias ConcatWithBase = _Enum!(concat, Base, enums);
 }
 
@@ -134,8 +142,10 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template ConcatWithBaseInitLast(Base, enums...)
-if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+public template ConcatWithBaseInitLast(Base, enums...) if (
+    enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
+    allSatisfy!(_isEnumOrEnumMember, enums)
+) {
     alias ConcatWithBaseInitLast = _Enum!(concatInitLast, Base, enums);
 }
 
@@ -173,8 +183,10 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template UniteWithBase(Base, enums...)
-if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+public template UniteWithBase(Base, enums...) if (
+    enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
+    allSatisfy!(_isEnumOrEnumMember, enums)
+) {
     alias UniteWithBase = _Enum!(unite, Base, enums);
 }
 
@@ -226,8 +238,10 @@ if (__traits(isIntegral, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
 }
 
 /// ditto
-public template MergeWithBase(Base, enums...)
-if (enums.length && __traits(isIntegral, Base, enums) && allSatisfy!(_isEnumOrEnumMember, enums)) {
+public template MergeWithBase(Base, enums...) if (
+    enums.length && __traits(isIntegral, Base, enums) && !is(Base == enum) &&
+    allSatisfy!(_isEnumOrEnumMember, enums)
+) {
     alias MergeWithBase = _Enum!(merge, Base, enums);
 }
 
