@@ -2,6 +2,9 @@ module enumcons.conv;
 
 import enumcons.traits;
 
+version (unittest)
+import enumcons.def: Concat;
+
 pure @safe:
 
 To as(To, From)(From e) nothrow @nogc
@@ -31,8 +34,6 @@ if (is(From == enum) && __traits(isIntegral, From, To) && isEnumSafelyConvertibl
 }
 
 nothrow @nogc unittest {
-    import enumcons.def;
-
     enum A { a, b }
     enum B { c, d, e }
     alias C = Concat!(A, B);
@@ -62,8 +63,6 @@ if (
 }
 
 nothrow @nogc unittest {
-    import enumcons.def;
-
     enum A { a = 4 }
     enum B { b }
     alias C = Concat!(A, B);
@@ -93,8 +92,6 @@ do {
 }
 
 nothrow @nogc unittest {
-    import enumcons.def;
-
     enum A { a = 3 }
     enum B { b }
     alias C = Concat!(A, B);

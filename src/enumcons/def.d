@@ -99,8 +99,6 @@ if (
 
 ///
 unittest {
-    import enumcons.traits: isEnumSafelyConvertible;
-
     @unknownValue(`_`) // All versions of D.
     enum Color {
         /+@unknownValue+/ _, // 2.082+
@@ -126,11 +124,6 @@ unittest {
     static assert(ExtendedColor.grey == ExtendedColor.gray);
     static assert(int(ExtendedColor.min) == Color.min);
     static assert(int(ExtendedColor.init) == Color.init);
-
-    static assert(isEnumSafelyConvertible!(Color, ExtendedColor));
-    static assert(isEnumSafelyConvertible!(MoreColors, ExtendedColor));
-    static assert(!isEnumSafelyConvertible!(ExtendedColor, Color));
-    static assert(!isEnumSafelyConvertible!(ExtendedColor, MoreColors));
 }
 
 /// Like `ConcatWithBase`, except that the resulting enum's `.init` value will be that of the last
@@ -153,8 +146,6 @@ if (
 
 ///
 unittest {
-    import enumcons.traits: isEnumSafelyConvertible;
-
     enum A { a0, a1 }
     enum B { b0, b1 }
 
@@ -164,11 +155,6 @@ unittest {
     static assert(C.a1 == 1);
     static assert(C.b0 == 2);
     static assert(C.b1 == 3);
-
-    static assert(isEnumSafelyConvertible!(A, C));
-    static assert(isEnumSafelyConvertible!(B, C));
-    static assert(!isEnumSafelyConvertible!(C, A));
-    static assert(!isEnumSafelyConvertible!(C, B));
 
     alias D = ConcatInitLast!(A, B.b1);
     // `b1` does not become `.init`; it becomes `@unknownValue`.
@@ -195,8 +181,6 @@ if (
 
 ///
 unittest {
-    import enumcons.traits: isEnumSafelyConvertible;
-
     enum A { a = 1, b = 2, c = 10 }
     enum B { x = 1000, y }
     alias C = Unite!(A, B);
@@ -208,11 +192,6 @@ unittest {
     static assert(C.x == 1000);
     static assert(C.y == 1001);
     static assert(C.init == C.a);
-
-    static assert(isEnumSafelyConvertible!(A, C));
-    static assert(isEnumSafelyConvertible!(B, C));
-    static assert(!isEnumSafelyConvertible!(C, A));
-    static assert(!isEnumSafelyConvertible!(C, B));
 }
 
 ///
@@ -251,8 +230,6 @@ if (
 
 ///
 unittest {
-    import enumcons.traits: isEnumSafelyConvertible;
-
     enum A { a, b, c }
     enum B { x = 1, y, z }
     alias C = Merge!(A, B);
@@ -265,9 +242,4 @@ unittest {
     static assert(C.y == C.c);
     static assert(C.z == 3);
     static assert(C.init == C.a);
-
-    static assert(isEnumSafelyConvertible!(A, C));
-    static assert(isEnumSafelyConvertible!(B, C));
-    static assert(!isEnumSafelyConvertible!(C, A));
-    static assert(!isEnumSafelyConvertible!(C, B));
 }
