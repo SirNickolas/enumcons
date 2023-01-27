@@ -99,3 +99,47 @@ nothrow @nogc unittest {
     assert(C.a.assertTo!A == A.a);
     assert(C.b.assertTo!B == B.b);
 }
+
+version (D_Exceptions) {
+    import std.conv: ConvException;
+
+    class EnumConvException: ConvException {
+        import std.exception: basicExceptionCtors;
+
+        ///
+        mixin basicExceptionCtors;
+    }
+
+    To tryTo(To, From)(From e)
+    if (
+        is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
+        isEnumPossiblyConvertible!(From, To)
+    ) {
+        // TODO: Optimize.
+        if (e.is_!To)
+            return e.assertTo!To;
+        enum msg = '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`';
+        throw new EnumConvException(msg);
+    }
+
+    unittest {
+        import std.exception: assertThrown;
+
+        enum A { a = 3 }
+        enum B { b }
+        alias C = Concat!(A, B);
+
+        assert(C.a.tryTo!A == A.a);
+        assert(C.b.tryTo!B == B.b);
+        assertThrown!EnumConvException(C.a.tryTo!B);
+        assertThrown!EnumConvException(C.b.tryTo!A);
+    }
+} else {
+    @disable class EnumConvException;
+
+    @disable To tryTo(To, From)(From)
+    if (
+        is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
+        isEnumPossiblyConvertible!(From, To)
+    );
+}
