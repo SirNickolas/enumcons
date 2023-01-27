@@ -1,6 +1,6 @@
 module enumcons.def;
 
-import std.meta: allSatisfy;
+import std.meta: AliasSeq, allSatisfy;
 import enumcons.generators: concat, concatInitLast, merge, unite;
 import enumcons.utils: TypeOf, declareSupertype;
 public import enumcons.utils: unknownValue;
@@ -16,24 +16,40 @@ private nothrow pure @safe @nogc:
 // combined.assertTo!Source // `AssertError` if lossless conversion is not possible.
 // combined.tryTo!Source // `ConvException` if lossless conversion is not possible.
 
-alias _memberNames(alias e) = __traits(allMembers, TypeOf!e);
+alias _memberNames(alias e) = AliasSeq!(__traits(allMembers, TypeOf!e)); // `AliasSeq` for D <2.084.
 
 template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
     import std.meta: staticMap;
-    import std.traits: EnumMembers, OriginalType;
+    import std.traits: OriginalType;
 
     // Choose the longest member as prefix to avoid name collision.
     enum prefix = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
-    static foreach (i, e; enums) {
-        static assert(e.sizeof <= 8,
-            '`' ~ TypeOf!e.stringof ~ "`'s original type is `" ~ OriginalType!(TypeOf!e).stringof ~
+    static foreach (i, E; staticMap!(TypeOf, enums)) {
+        static assert(E.sizeof <= 8,
+            '`' ~ E.stringof ~ "`'s original type is `" ~ OriginalType!E.stringof ~
             "`, which is unsupported",
         );
+
+        // Attributes on enum members are supported since 2.082.
         // TODO: Drop `@unknownValue` attributes from source enums.
-        static foreach (j, member; EnumMembers!(TypeOf!e))
-            static if (__traits(getAttributes, member).length)
-                mixin(`alias `, prefix, i, '_', j, ` = __traits(getAttributes, member);`);
+        static foreach (j, memberName; __traits(allMembers, E))
+            static if (__traits(getAttributes, __traits(getMember, E, memberName)).length) {
+                static if (__VERSION__ >= 2_092)
+                mixin(
+                    `alias ` ~ prefix ~ i.stringof ~ '_' ~ j.stringof ~
+                    ` = __traits(getAttributes, E.` ~ memberName ~ `);`
+                );
+                else {
+                    // D >=2.082 <2.092 do not flatten tuples when they appear as attributes.
+                    // We have to load them into separate variables and attach individually.
+                    static foreach (k, attr;
+                        __traits(getAttributes, __traits(getMember, E, memberName))
+                    ) mixin(
+                        `alias ` ~ prefix ~ i.stringof ~ '_' ~ j.stringof ~ k.stringof ~ ` = attr;`
+                    );
+                }
+            }
     }
     // `Base` may be specified explicitly by the user, but it may also be deduced from
     // the arguments - and will definitely be larger than 8 bytes if one of them is. To give a more
@@ -44,11 +60,17 @@ template _Enum(alias generateMembers, Base, enums...) {
     mixin(
         `@(declareSupertype!(generated.offsets, generated.allowDowncast, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
-        enum _Enum: Base {`, generated.code, '}'
+        enum _Enum: Base {` ~ generated.code ~ '}'
     );
+    // Access all attributes of the newly created enum. Without that, D <2.093 resolves their
+    // identifiers in a wrong scope.
+    static if (__VERSION__ < 2_093)
+        static foreach (j, memberName; __traits(allMembers, _Enum))
+            static if (__traits(getAttributes, __traits(getMember, _Enum, memberName)).length) { }
 }
 
 enum _isEnumOrEnumMember(alias x) = is(x == enum) || is(typeof(x) == enum);
+enum _isEnumOrEnumMember(T) = false; // In D <2.087, primitive types could not be aliased.
 
 unittest {
     enum I { a }
@@ -99,7 +121,7 @@ if (
 
 ///
 unittest {
-    @unknownValue(`_`) // All versions of D.
+    // @unknownValue(`_`) // All versions of D. But only in 2.082+ you can do it in a local scope.
     enum Color {
         /+@unknownValue+/ _, // 2.082+
         red,

@@ -24,11 +24,13 @@ unittest {
 }
 
 static if (__VERSION__ >= 2_095)
+mixin(q{
     package template staticMapI(alias func, args...) {
         alias staticMapI = AliasSeq!();
         static foreach (i, arg; args)
             staticMapI = AliasSeq!(staticMapI, func!(i, arg));
     }
+});
 else // Simple but slow.
     package template staticMapI(alias func, args...) {
         template loop(tailArgs...) {
@@ -95,7 +97,7 @@ package template subtypeInfo(From, To) {
     enum subtypeInfo = _subtypeInfo!(Unqual!From, Unqual!To);
 }
 
-unittest {
+version (unittest) { // D <2.082 allows to attach attributes only to global enums.
     enum A { a, b }
     enum C { c }
     enum D { d }
@@ -123,7 +125,9 @@ unittest {
 
     @declareSupertype!([0, 4, 12], true, AD, EL, M)
     enum AM { a, b, c, d, e, f, g, h, i, j, k, l, m }
+}
 
+unittest {
     static assert(subtypeInfo!(A, AC).offset == 0);
     static assert(subtypeInfo!(C, AC).offset == 2);
     static assert(subtypeInfo!(AC, AD).offset == 0);

@@ -10,12 +10,25 @@ package struct GenResult {
 
 string _generateOne(E)(in string attrPrefix, long offset) {
     import std.conv: to;
+    import std.meta: Alias;
 
     string result;
     static foreach (j, memberName; __traits(allMembers, E)) {{
-        alias member = __traits(getMember, E, memberName);
-        static if (__traits(getAttributes, member).length)
-            result ~= attrPrefix ~ j.stringof ~ ' ';
+        alias member = Alias!(__traits(getMember, E, memberName)); // `Alias` for D <2.084.
+        // Attributes on enum members are supported since 2.082.
+        enum attrCount = __traits(getAttributes, member).length;
+        static if (attrCount) {
+            static if (__VERSION__ >= 2_092)
+                result ~= attrPrefix ~ j.stringof ~ ' ';
+            else {
+                // In D >=2.082 <2.092, we have to attach attributes individually.
+                const prefix = attrPrefix ~ j.stringof;
+                static foreach (k; 0 .. attrCount)
+                    result ~= prefix ~ k.stringof;
+                result ~= ' ';
+            }
+        }
+
         result ~= memberName ~ '=' ~ (offset + member).to!string ~ ',';
     }}
     return result;
@@ -29,12 +42,23 @@ unittest {
 
 static if (__VERSION__ >= 2_082)
 unittest {
-    mixin(q{enum E { f, a, @c b = -2, c, @(d, "") d, e = a }});
+    mixin(q{enum E { f, a, @E b = -2, c, d, @(E, "") e = a + 1 }});
+    static assert(__traits(getAttributes, E.b).length); // D <2.093.
+    static assert(__traits(getAttributes, E.e).length);
 
-    version (D_LP64)
-        assert(_generateOne!E(`@f0LU_`, 1) == `f=1,a=2,@f0LU_2LU b=-1,c=0,@f0LU_4LU d=1,e=2,`);
+    static if (__VERSION__ < 2_092)
+        version (D_LP64)
+            assert(_generateOne!E(`@f0LU_`, 1) ==
+                `f=1,a=2,@f0LU_2LU0LU b=-1,c=0,d=1,@f0LU_5LU0LU@f0LU_5LU1LU e=3,`,
+            );
+        else
+            assert(_generateOne!E(`@f0u_`, 1) ==
+                `f=1,a=2,@f0u_2u0u b=-1,c=0,d=1,@f0u_5u0u@f0u_5u1u e=3,`,
+            );
+    else version (D_LP64)
+        assert(_generateOne!E(`@f0LU_`, 1) == `f=1,a=2,@f0LU_2LU b=-1,c=0,d=1,@f0LU_5LU e=3,`);
     else
-        assert(_generateOne!E(`@f0u_`, 1) == `f=1,a=2,@f0u_2u b=-1,c=0,@f0u_4u d=1,e=2,`);
+        assert(_generateOne!E(`@f0u_`, 1) == `f=1,a=2,@f0u_2u b=-1,c=0,d=1,@f0u_5u e=3,`);
 }
 
 string _injectIndex(in string prefix, in string i) {
@@ -59,12 +83,15 @@ unittest {
     assert(merge(`a`).code == ``);
 }
 
-static if (__VERSION__ >= 2_082)
+static if (__VERSION__ >= 2_092)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
     });
+    static assert(__traits(getAttributes, A.c).length); // D <2.093.
+    static assert(__traits(getAttributes, B.f).length);
+
     version (D_LP64)
         assert(merge!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=3,`);
     else
@@ -116,12 +143,15 @@ unittest {
     assert(unite(`a`).code == ``);
 }
 
-static if (__VERSION__ >= 2_082)
+static if (__VERSION__ >= 2_092)
 unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
     });
+    static assert(__traits(getAttributes, A.c).length); // D <2.093.
+    static assert(__traits(getAttributes, B.f).length);
+
     version (D_LP64)
         assert(unite!(A, B)(`a`).code == `a=0,@a0LU_1LU c=-2,b=4,d=-10,e=-9,@a1LU_2LU f=-3,`);
     else
@@ -179,19 +209,23 @@ unittest {
     assert(concat(`a`).code == ``);
 }
 
-static if (__VERSION__ >= 2_082)
+static if (__VERSION__ >= 2_092)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
-        enum B { x, y = -1, @A z, @A @B w = z }
+        enum B { x, y = -2, @A z, @A @B w = x + 1 }
     });
+    static assert(__traits(getAttributes, A.b).length); // D <2.093.
+    static assert(__traits(getAttributes, B.z).length);
+    static assert(__traits(getAttributes, B.w).length);
+
     version (D_LP64)
         assert(concat!(A, B)(`a`).code ==
-            `a=0,@a0LU_1LU b=-1,c=0,d=1,x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,`,
+            `a=0,@a0LU_1LU b=-1,c=0,d=1,x=4,y=2,@a1LU_2LU z=3,@a1LU_3LU w=5,`,
         );
     else
         assert(concat!(A, B)(`a`).code ==
-            `a=0,@a0u_1u b=-1,c=0,d=1,x=3,y=2,@a1u_2u z=3,@a1u_3u w=3,`,
+            `a=0,@a0u_1u b=-1,c=0,d=1,x=4,y=2,@a1u_2u z=3,@a1u_3u w=5,`,
         );
 }
 
@@ -222,18 +256,22 @@ unittest {
     assert(concatInitLast(`a`).code == ``);
 }
 
-static if (__VERSION__ >= 2_082)
+static if (__VERSION__ >= 2_092)
 unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
-        enum B { x, y = -1, @A z, @A @B w = z }
+        enum B { x, y = -2, @A z, @A @B w = x + 1 }
     });
+    static assert(__traits(getAttributes, A.b).length); // D <2.093.
+    static assert(__traits(getAttributes, B.z).length);
+    static assert(__traits(getAttributes, B.w).length);
+
     version (D_LP64)
         assert(concatInitLast!(A, B)(`a`).code ==
-            `x=3,y=2,@a1LU_2LU z=3,@a1LU_3LU w=3,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
+            `x=4,y=2,@a1LU_2LU z=3,@a1LU_3LU w=5,a=0,@a0LU_1LU b=-1,c=0,d=1,`,
         );
     else
         assert(concatInitLast!(A, B)(`a`).code ==
-            `x=3,y=2,@a1u_2u z=3,@a1u_3u w=3,a=0,@a0u_1u b=-1,c=0,d=1,`,
+            `x=4,y=2,@a1u_2u z=3,@a1u_3u w=5,a=0,@a0u_1u b=-1,c=0,d=1,`,
         );
 }

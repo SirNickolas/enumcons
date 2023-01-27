@@ -16,7 +16,7 @@ if (is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super)) {
 unittest {
     enum A { a, b }
     enum B { c, d }
-    enum X;
+    enum X { x }
     alias C = Concat!(A, B);
 
     static assert(isEnumSubtype!(A, C));
@@ -48,7 +48,7 @@ template isEnumSafelyConvertible(From, To) if (is(From == enum) && __traits(isIn
 unittest {
     enum A { a, b }
     enum B { c, d }
-    enum X;
+    enum X { x }
     alias C = Concat!(A, B);
 
     static assert(isEnumSafelyConvertible!(A, C));
@@ -84,7 +84,7 @@ if (is(From == enum) && is(To == enum) && __traits(isIntegral, From, To)) {
 unittest {
     enum A { a, b }
     enum B { c, d }
-    enum X;
+    enum X { x }
     alias C = Concat!(A, B);
 
     static assert(isEnumPossiblyConvertible!(C, A));
@@ -130,16 +130,28 @@ package template prettyName(alias T: X!args, alias X, args...) {
         __traits(identifier, X) ~ `!(` ~ [staticMap!(.prettyName, args)].join(`, `) ~ ')';
 }
 
-package template prettyName(alias x) {
+template _isCallable(alias func) {
     import std.traits: isCallable;
 
+    // Detection of callable templates is backported from recent versions of Phobos.
+    static if (is(typeof(&func.opCall!())))
+        enum _isCallable = isCallable!(typeof(&func.opCall!()));
+    else static if (is(typeof(&func!())))
+        enum _isCallable = isCallable!(typeof(&func!()));
+    else
+        enum _isCallable = isCallable!func;
+}
+
+package template prettyName(alias x) {
     static if (is(typeof(x) == enum))
         enum prettyName = prettyName!(typeof(x)) ~ '.' ~ x.stringof;
-    else static if (isCallable!x)
+    else static if (_isCallable!x)
         enum prettyName = __traits(identifier, x);
     else
         enum prettyName = x.stringof;
 }
+
+package enum prettyName(T) = T.stringof; // D <2.087.
 
 unittest {
     enum A: short { a }
