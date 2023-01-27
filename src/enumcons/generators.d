@@ -5,6 +5,7 @@ private nothrow pure @safe:
 package struct GenResult {
     string code;
     immutable(long)[ ] offsets;
+    bool allowDowncast;
 }
 
 string _generateOne(E)(in string attrPrefix, long offset) {
@@ -46,7 +47,7 @@ package GenResult merge(enums...)(in string prefix) {
     string code;
     static foreach (i, e; enums)
         code ~= _generateOne!(TypeOf!e)(prefix._injectIndex(i.stringof), 0);
-    return GenResult(code, new long[enums.length]);
+    return GenResult(code, new long[enums.length], enums.length <= 1);
 }
 
 unittest {
@@ -86,7 +87,7 @@ template _getPoints(e) {
         alias _getPoints = AliasSeq!(_Point(long.min), _Point(E.max, true), _Point(E.min));
 }
 
-package template unite(enums...) {
+package GenResult unite(enums...)(in string prefix) {
     static if (enums.length >= 2) {
         import std.conv: to;
         import std.meta: staticMap, staticSort;
@@ -98,7 +99,10 @@ package template unite(enums...) {
                 "` is defined in multiple enums",
             );
     }
-    alias unite = merge!enums;
+
+    auto result = merge!enums(prefix);
+    result.allowDowncast = true;
+    return result;
 }
 
 unittest {
@@ -159,7 +163,7 @@ package GenResult concat(enums...)(in string prefix) {
         offset += E.max + 1L;
         offsets[i + 1] = offset;
     }}
-    return GenResult(code, (() @trusted => assumeUnique(offsets))());
+    return GenResult(code, (() @trusted => assumeUnique(offsets))(), true);
 }
 
 unittest {
