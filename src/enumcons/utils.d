@@ -49,7 +49,9 @@ struct _HasSubtype(E) {
 }
 
 package template declareSupertype(immutable(long)[ ] offsets, subtypes...) {
-    enum udaFor(size_t i, alias sub) = _HasSubtype!(TypeOf!sub)(offsets[i]);
+    import std.traits: Unqual;
+
+    enum udaFor(size_t i, alias sub) = _HasSubtype!(Unqual!(TypeOf!sub))(offsets[i]);
     alias declareSupertype = staticMapI!(udaFor, subtypes);
 }
 
@@ -62,7 +64,7 @@ unittest {
     );
 }
 
-long _getOffsetForUpcast(From, Mid)(_HasSubtype!Mid proof) {
+long _calcOffsetForUpcast(From, Mid)(_HasSubtype!Mid proof) {
     return proof.offset + _offsetForUpcast!(From, Mid);
 }
 
@@ -78,8 +80,8 @@ template _offsetForUpcast(From, To) {
         // any two nodes. All things considered, `enum _offsetForUpcast` below will be defined
         // at most once.
         static foreach (uda; __traits(getAttributes, To))
-            static if (__traits(compiles, _getOffsetForUpcast!From(uda)))
-                enum _offsetForUpcast = _getOffsetForUpcast!From(uda);
+            static if (__traits(compiles, _calcOffsetForUpcast!From(uda)))
+                enum _offsetForUpcast = _calcOffsetForUpcast!From(uda);
     }
 }
 
