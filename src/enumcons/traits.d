@@ -25,3 +25,22 @@ if (is(From == enum) && is(To == enum) && __traits(isIntegral, From, To)) {
     else
         enum isEnumPossiblyConvertible = false;
 }
+
+package template prettyName(alias T: X!args, alias X, args...) {
+    import std.array: join;
+    import std.meta: staticMap;
+
+    enum prettyName =
+        __traits(identifier, X) ~ `!(` ~ [staticMap!(.prettyName, args)].join(`, `) ~ ')';
+}
+
+package template prettyName(alias x) {
+    import std.traits: isCallable;
+
+    static if (is(typeof(x) == enum))
+        enum prettyName = prettyName!(typeof(x)) ~ '.' ~ x.stringof;
+    else static if (isCallable!x)
+        enum prettyName = __traits(identifier, x);
+    else
+        enum prettyName = x.stringof;
+}

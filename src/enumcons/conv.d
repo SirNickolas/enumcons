@@ -75,3 +75,30 @@ nothrow @nogc unittest {
     static assert(!__traits(compiles, A.a.is_!B));
     static assert(!__traits(compiles, A.a.is_!C));
 }
+
+To assertTo(To, From)(From e) nothrow @nogc
+if (
+    is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
+    isEnumPossiblyConvertible!(From, To)
+)
+in {
+    assert(e.is_!To, '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`');
+}
+do {
+    import enumcons.utils: subtypeInfo;
+
+    enum long offset = subtypeInfo!(To, From).offset;
+    // TODO: Optimize.
+    return cast(To)(e - offset);
+}
+
+nothrow @nogc unittest {
+    import enumcons.def;
+
+    enum A { a = 3 }
+    enum B { b }
+    alias C = Concat!(A, B);
+
+    assert(C.a.assertTo!A == A.a);
+    assert(C.b.assertTo!B == B.b);
+}
