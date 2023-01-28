@@ -1,7 +1,7 @@
 module enumcons.generators;
 
-static if (__VERSION__ >= 2_092)
-    version = EnumCons_ModernAttributes;
+static if (__VERSION__ < 2_092)
+    version = EnumCons_OldAttributes;
 
 private nothrow pure @safe:
 
@@ -9,6 +9,53 @@ package struct GenResult {
     string code;
     immutable(long)[ ] offsets;
     bool allowDowncast;
+}
+
+version (unittest)
+string _tr(return in string s) {
+    import std.exception: assumeWontThrow;
+    import std.string: indexOf, translate;
+
+    return assumeWontThrow({
+        immutable table = [dchar('u'): "LU"];
+        version (EnumCons_OldAttributes)
+            version (D_LP64)
+                return s.translate(table);
+            else
+                return s;
+        else {
+            string result;
+            ptrdiff_t anchor, sigil;
+            while ((sigil = s.indexOf('@', anchor)) != -1) {
+                const bracket = s.indexOf('[', sigil + 3);
+                auto attr = s[sigil + 2 .. bracket];
+                version (D_LP64)
+                    attr = attr.translate(table);
+                result ~= s[anchor .. sigil + 1];
+                result ~= attr;
+                result ~= ' ';
+                anchor = s.indexOf(')', bracket + 1) + 1;
+                assert(anchor);
+            }
+            result ~= s[anchor .. $];
+            return result;
+        }
+    }());
+}
+
+unittest {
+    assert(_tr(`a=0,b=1,`) == `a=0,b=1,`);
+    const result = _tr(`@(a0u0u[0],)a=0,b=1,@(a0u2u[0],a0u2u[1],)c=2,`);
+    version (EnumCons_OldAttributes)
+        version (D_LP64)
+            assert(result == `@(a0LU0LU[0],)a=0,b=1,@(a0LU2LU[0],a0LU2LU[1],)c=2,`);
+        else
+            assert(result == `@(a0u0u[0],)a=0,b=1,@(a0u2u[0],a0u2u[1],)c=2,`);
+    else
+        version (D_LP64)
+            assert(result == `@a0LU0LU a=0,b=1,@a0LU2LU c=2,`);
+        else
+            assert(result == `@a0u0u a=0,b=1,@a0u2u c=2,`);
 }
 
 string _generateOne(E)(in string gensym, long offset) {
@@ -21,33 +68,20 @@ string _generateOne(E)(in string gensym, long offset) {
         // Attributes on enum members are supported since 2.082.
         enum attrCount = __traits(getAttributes, member).length;
         static if (attrCount) {
-            version (EnumCons_ModernAttributes)
-                result ~= '@' ~ gensym ~ j.stringof ~ ' ';
-            else {
+            version (EnumCons_OldAttributes) {
                 // In D <2.092, sequences are not flattened when they appear as attributes.
                 // We have to attach their elements individually.
                 result ~= `@(`;
                 foreach (k; 0 .. attrCount)
                     result ~= gensym ~ j.stringof ~ '[' ~ k.to!string ~ `],`;
                 result ~= ')';
-            }
+            } else
+                result ~= '@' ~ gensym ~ j.stringof ~ ' ';
         }
 
         result ~= memberName ~ '=' ~ (offset + member).to!string ~ ',';
     }}
     return result;
-}
-
-version (unittest) {
-    version (D_LP64)
-        string _tr(return in string s) {
-            import std.exception: assumeWontThrow;
-            import std.string: translate;
-
-            return assumeWontThrow(s.translate(['u': "LU"]));
-        }
-    else
-        string _tr(return in string s) @nogc { return s; }
 }
 
 unittest {
@@ -62,14 +96,9 @@ unittest {
     static assert(__traits(getAttributes, E.b).length); // D <2.093.
     static assert(__traits(getAttributes, E.e).length);
 
-    version (EnumCons_ModernAttributes)
-        assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
-            _tr(`f=1,a=2,@f0u2u b=-1,c=0,d=1,@f0u5u e=3,`),
-        );
-    else
-        assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
-            _tr(`f=1,a=2,@(f0u2u[0],)b=-1,c=0,d=1,@(f0u5u[0],f0u5u[1],)e=3,`),
-        );
+    assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
+        _tr(`f=1,a=2,@(f0u2u[0],)b=-1,c=0,d=1,@(f0u5u[0],f0u5u[1],)e=3,`),
+    );
 }
 
 package GenResult merge(enums...)(in string gensym) {
@@ -99,14 +128,7 @@ unittest {
     static assert(__traits(getAttributes, A.c).length); // D <2.093.
     static assert(__traits(getAttributes, B.f).length);
 
-    version (EnumCons_ModernAttributes)
-        assert(merge!(A, B)(`a`).code ==
-            _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=3,`),
-        );
-    else
-        assert(merge!(A, B)(`a`).code ==
-            _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=3,`),
-        );
+    assert(merge!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=3,`));
 }
 
 struct _Point {
@@ -163,14 +185,7 @@ unittest {
     static assert(__traits(getAttributes, A.c).length); // D <2.093.
     static assert(__traits(getAttributes, B.f).length);
 
-    version (EnumCons_ModernAttributes)
-        assert(unite!(A, B)(`a`).code ==
-            _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=-3,`),
-        );
-    else
-        assert(unite!(A, B)(`a`).code ==
-            _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=-3,`),
-        );
+    assert(unite!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=-3,`));
 }
 
 unittest {
@@ -234,14 +249,9 @@ unittest {
     static assert(__traits(getAttributes, B.z).length);
     static assert(__traits(getAttributes, B.w).length);
 
-    version (EnumCons_ModernAttributes)
-        assert(concat!(A, B)(`a`).code ==
-            _tr(`a=0,@a0u1u b=-1,c=0,d=1,x=4,y=2,@a1u2u z=3,@a1u3u w=5,`),
-        );
-    else
-        assert(concat!(A, B)(`a`).code ==
-            _tr(`a=0,@(a0u1u[0],)b=-1,c=0,d=1,x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,`),
-        );
+    assert(concat!(A, B)(`a`).code ==
+        _tr(`a=0,@(a0u1u[0],)b=-1,c=0,d=1,x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,`),
+    );
 }
 
 package template concatInitLast(enums...) {
@@ -281,12 +291,7 @@ unittest {
     static assert(__traits(getAttributes, B.z).length);
     static assert(__traits(getAttributes, B.w).length);
 
-    version (EnumCons_ModernAttributes)
-        assert(concatInitLast!(A, B)(`a`).code ==
-            _tr(`x=4,y=2,@a1u2u z=3,@a1u3u w=5,a=0,@a0u1u b=-1,c=0,d=1,`),
-        );
-    else
-        assert(concatInitLast!(A, B)(`a`).code ==
-            _tr(`x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],@a1u3u[1],)w=5,a=0,@(a0u1u[0],)b=-1,c=0,d=1,`),
-        );
+    assert(concatInitLast!(A, B)(`a`).code ==
+        _tr(`x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,a=0,@(a0u1u[0],)b=-1,c=0,d=1,`),
+    );
 }
