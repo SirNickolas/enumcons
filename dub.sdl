@@ -7,4 +7,3 @@ license     "MIT"
 toolchainRequirements frontend=">=2.076"
 
 targetPath "build"
-// versions "EnumCons_OldAttributes"

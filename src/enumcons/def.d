@@ -26,21 +26,20 @@ template _Enum(alias generateMembers, Base, enums...) {
 
     // Choose the longest member as prefix to avoid name collision.
     enum gensym = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
-    static foreach (i, E; staticMap!(TypeOf, enums)) {
+    static foreach (uint i, E; staticMap!(TypeOf, enums)) {
         static assert(E.sizeof <= 8,
             '`' ~ E.stringof ~ "`'s original type is `" ~ OriginalType!E.stringof ~
             "`, which is unsupported",
         );
 
         // Attributes on enum members are supported since 2.082.
-        // TODO: Drop `@unknownValue` attributes from source enums.
-        static foreach (j, memberName; __traits(allMembers, E))
+        static foreach (int j, memberName; __traits(allMembers, E))
             static if (__traits(getAttributes, __traits(getMember, E, memberName)).length)
-                mixin(
-                    `alias ` ~ gensym ~ i.stringof ~ j.stringof ~
-                    // `AliasSeq` for D <2.084.
-                    ` = AliasSeq!(__traits(getAttributes, E.` ~ memberName ~ `));`
-                );
+            mixin(
+                `alias ` ~ gensym ~ i.stringof ~ j.stringof ~
+                // `AliasSeq` for D <2.084.
+                ` = AliasSeq!(__traits(getAttributes, E.` ~ memberName ~ `));`
+            );
     }
     // `Base` may be specified explicitly by the user, but it may also be deduced from
     // the arguments - and will definitely be larger than 8 bytes if one of them is. To give a more
@@ -112,7 +111,7 @@ if (
 
 ///
 unittest {
-    // @unknownValue(`_`) // All versions of D. But only in 2.082+ you can do it in a local scope.
+    // @unknownValue(`_`) // All versions of D. But only in 2.082+ you can do it at local scope.
     enum Color {
         /+@unknownValue+/ _, // 2.082+
         red,

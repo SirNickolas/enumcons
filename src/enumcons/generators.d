@@ -1,8 +1,5 @@
 module enumcons.generators;
 
-static if (__VERSION__ < 2_092)
-    version = EnumCons_OldAttributes;
-
 version (unittest)
     import enumcons.utils: fixEnumsUntilD2093;
 
@@ -14,72 +11,26 @@ package struct GenResult {
     bool allowDowncast;
 }
 
-version (unittest)
-string _tr(return in string s) {
-    import std.exception: assumeWontThrow;
-    import std.string: indexOf, translate;
-
-    return assumeWontThrow({
-        immutable table = [dchar('u'): "LU"];
-        version (EnumCons_OldAttributes)
-            version (D_LP64)
-                return s.translate(table);
-            else
-                return s;
-        else {
-            string result;
-            ptrdiff_t anchor, sigil;
-            while ((sigil = s.indexOf('@', anchor)) != -1) {
-                const bracket = s.indexOf('[', sigil + 3);
-                auto attr = s[sigil + 2 .. bracket];
-                version (D_LP64)
-                    attr = attr.translate(table);
-                result ~= s[anchor .. sigil + 1];
-                result ~= attr;
-                result ~= ' ';
-                anchor = s.indexOf(')', bracket + 1) + 1;
-                assert(anchor);
-            }
-            result ~= s[anchor .. $];
-            return result;
-        }
-    }());
-}
-
-unittest {
-    assert(_tr(`a=0,b=1,`) == `a=0,b=1,`);
-    const result = _tr(`@(a0u0u[0],)a=0,b=1,@(a0u2u[0],a0u2u[1],)c=2,`);
-    version (EnumCons_OldAttributes)
-        version (D_LP64)
-            assert(result == `@(a0LU0LU[0],)a=0,b=1,@(a0LU2LU[0],a0LU2LU[1],)c=2,`);
-        else
-            assert(result == `@(a0u0u[0],)a=0,b=1,@(a0u2u[0],a0u2u[1],)c=2,`);
-    else
-        version (D_LP64)
-            assert(result == `@a0LU0LU a=0,b=1,@a0LU2LU c=2,`);
-        else
-            assert(result == `@a0u0u a=0,b=1,@a0u2u c=2,`);
-}
-
 string _generateOne(E)(in string gensym, long offset) {
     import std.conv: to;
-    import std.meta: Alias;
+    import std.meta: Alias, AliasSeq;
+    import enumcons.utils: unknownValue;
 
     string result;
-    static foreach (j, memberName; __traits(allMembers, E)) {{
+    static foreach (int j, memberName; __traits(allMembers, E)) {{
         alias member = Alias!(__traits(getMember, E, memberName)); // `Alias` for D <2.084.
+
         // Attributes on enum members are supported since 2.082.
-        enum attrCount = __traits(getAttributes, member).length;
-        static if (attrCount) {
-            version (EnumCons_OldAttributes) {
-                // In D <2.092, sequences are not flattened when they appear as attributes.
-                // We have to attach their elements individually.
-                result ~= `@(`;
-                foreach (k; 0 .. attrCount)
-                    result ~= gensym ~ j.stringof ~ '[' ~ k.to!string ~ `],`;
+        alias attrs = AliasSeq!(__traits(getAttributes, member)); // `AliasSeq` for D <2.084.
+        static if (attrs.length) {
+            string attrsCode = `@(`;
+            static foreach (int k, attr; attrs)
+                static if (!is(attr == unknownValue))
+                    attrsCode ~= gensym ~ j.stringof ~ '[' ~ k.stringof ~ `],`;
+            if (attrsCode.length > 2) {
+                result ~= attrsCode[0 .. $ - 1];
                 result ~= ')';
-            } else
-                result ~= '@' ~ gensym ~ j.stringof ~ ' ';
+            }
         }
 
         result ~= memberName ~ '=' ~ (offset + member).to!string ~ ',';
@@ -90,7 +41,7 @@ string _generateOne(E)(in string gensym, long offset) {
 unittest {
     enum E { b, c, a, d = -4, e, f = 10, g, h = 1 }
 
-    assert(_generateOne!E(`b0LU`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
+    assert(_generateOne!E(`b0u`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -99,16 +50,30 @@ unittest {
         enum E { f, a, @E b = -2, c, d, @(E, "") e = a + 1 }
     } ~ fixEnumsUntilD2093(`E`));
 
-    assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
-        _tr(`f=1,a=2,@(f0u2u[0],)b=-1,c=0,d=1,@(f0u5u[0],f0u5u[1],)e=3,`),
-    );
+    assert(_generateOne!E(`f0u`, 1) == `f=1,a=2,@(f0u2[0])b=-1,c=0,d=1,@(f0u5[0],f0u5[1])e=3,`);
+}
+
+static if (__VERSION__ >= 2_082)
+unittest {
+    import enumcons.utils: unknownValue;
+
+    mixin(q{
+        enum U {
+            @unknownValue _, // Dropped.
+            @unknownValue @unknownValue @U a, // Dropped.
+            @unknownValue() b,
+            @unknownValue(`_`) c,
+        }
+    } ~ fixEnumsUntilD2093(`U`));
+
+    assert(_generateOne!U(`_0u`, 0) == `_=0,@(_0u1[2])a=1,@(_0u2[0])b=2,@(_0u3[0])c=3,`);
 }
 
 package GenResult merge(enums...)(in string gensym) {
     import enumcons.utils: TypeOf;
 
     string code;
-    static foreach (i, e; enums)
+    static foreach (uint i, e; enums)
         code ~= _generateOne!(TypeOf!e)(gensym ~ i.stringof, 0);
     return GenResult(code, new long[enums.length], enums.length <= 1);
 }
@@ -129,7 +94,7 @@ unittest {
         enum B { d = -10, e, @A f = 3 }
     } ~ fixEnumsUntilD2093(`A`, `B`));
 
-    assert(merge!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=3,`));
+    assert(merge!(A, B)(`a`).code == `a=0,@(a0u1[0])c=-2,b=4,d=-10,e=-9,@(a1u2[0])f=3,`);
 }
 
 struct _Point {
@@ -184,7 +149,7 @@ unittest {
         enum B { d = -10, e, @A f = -3 }
     } ~ fixEnumsUntilD2093(`A`, `B`));
 
-    assert(unite!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=-3,`));
+    assert(unite!(A, B)(`a`).code == `a=0,@(a0u1[0])c=-2,b=4,d=-10,e=-9,@(a1u2[0])f=-3,`);
 }
 
 unittest {
@@ -217,7 +182,7 @@ package GenResult concat(enums...)(in string gensym) {
     string code;
     auto offsets = new long[enums.length + 1]; // `concatInitLast` needs one extra element.
     long offset;
-    static foreach (i, e; enums) {{
+    static foreach (uint i, e; enums) {{
         static if (!is(e E))
             alias E = typeof(e);
         static if (i)
@@ -246,7 +211,7 @@ unittest {
     } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(concat!(A, B)(`a`).code ==
-        _tr(`a=0,@(a0u1u[0],)b=-1,c=0,d=1,x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,`),
+        `a=0,@(a0u1[0])b=-1,c=0,d=1,x=4,y=2,@(a1u2[0])z=3,@(a1u3[0],a1u3[1])w=5,`,
     );
 }
 
@@ -257,7 +222,7 @@ package template concatInitLast(enums...) {
         GenResult concatInitLast(in string gensym) {
             import enumcons.utils: TypeOf;
 
-            enum n = enums.length - 1;
+            enum uint n = enums.length - 1;
             auto result = concat!(enums[0 .. n])(gensym);
             alias Last = TypeOf!(enums[n]);
             result.code = _generateOne!Last(
@@ -285,6 +250,6 @@ unittest {
     } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(concatInitLast!(A, B)(`a`).code ==
-        _tr(`x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,a=0,@(a0u1u[0],)b=-1,c=0,d=1,`),
+        `x=4,y=2,@(a1u2[0])z=3,@(a1u3[0],a1u3[1])w=5,a=0,@(a0u1[0])b=-1,c=0,d=1,`,
     );
 }
