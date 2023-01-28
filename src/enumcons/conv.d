@@ -12,7 +12,7 @@ if (is(From == enum) && __traits(isIntegral, From, To) && isEnumSafelyConvertibl
     static if (is(From: To))
         return e;
     else {
-        import enumcons.utils: subtypeInfo;
+        import enumcons.type_system: subtypeInfo;
 
         enum long offset = subtypeInfo!(From, To).offset;
         static if (!offset)
@@ -55,7 +55,7 @@ if (
     is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super) &&
     isEnumPossiblyConvertible!(Super, Sub)
 ) {
-    import enumcons.utils: subtypeInfo;
+    import enumcons.type_system: subtypeInfo;
 
     enum long offset = subtypeInfo!(Sub, Super).offset + Sub.min;
     // TODO: Optimize.
@@ -84,7 +84,7 @@ in {
     assert(e.is_!To, '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`');
 }
 do {
-    import enumcons.utils: subtypeInfo;
+    import enumcons.type_system: subtypeInfo;
 
     enum long offset = subtypeInfo!(To, From).offset;
     // TODO: Optimize.

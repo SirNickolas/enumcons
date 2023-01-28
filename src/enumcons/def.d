@@ -2,7 +2,7 @@ module enumcons.def;
 
 import std.meta: AliasSeq, allSatisfy;
 import enumcons.generators: concat, concatInitLast, merge, unite;
-import enumcons.utils: TypeOf, declareSupertype;
+import enumcons.utils: TypeOf;
 public import enumcons.utils: unknownValue;
 
 private nothrow pure @safe @nogc:
@@ -22,6 +22,7 @@ template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
     import std.meta: staticMap;
     import std.traits: OriginalType;
+    import enumcons.type_system: declareSupertype;
 
     // Choose the longest member as prefix to avoid name collision.
     enum gensym = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
