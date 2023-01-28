@@ -92,55 +92,87 @@ unittest {
 struct _HasSubtype(E) {
     long offset;
     bool allowDowncast;
+    bool hasUnknownValue;
+    long unknownValue;
 }
 
 package template declareSupertype(immutable(long)[ ] offsets, bool allowDowncast, subtypes...) {
     import std.traits: Unqual;
-    import enumcons.utils: TypeOf, staticMapI;
+    import enumcons.utils: staticMapI;
 
-    enum udaFor(size_t i, alias sub) = _HasSubtype!(Unqual!(TypeOf!sub))(offsets[i], allowDowncast);
-    alias declareSupertype = staticMapI!(udaFor, subtypes);
+    template typeProof(size_t i, alias enumOrValue) {
+        static if (is(Unqual!enumOrValue E)) {
+            alias unknownValue = _typeBoundUnknownValue!E;
+            static if (is(typeof(unknownValue) == void))
+                enum typeProof = _HasSubtype!E(offsets[i], allowDowncast);
+            else
+                enum _HasSubtype!E typeProof = {
+                    offset: offsets[i],
+                    allowDowncast: allowDowncast,
+                    hasUnknownValue: true,
+                    unknownValue: unknownValue,
+                };
+        } else {
+            // The unknown value was specified explicitly. Do not even check whether `@unknownValue`
+            // annotations are attached to the type correctly.
+            enum _HasSubtype!(Unqual!(typeof(enumOrValue))) typeProof = {
+                offset: offsets[i],
+                allowDowncast: allowDowncast,
+                hasUnknownValue: true,
+                unknownValue: enumOrValue,
+            };
+        }
+    }
+
+    alias declareSupertype = staticMapI!(typeProof, subtypes);
 }
 
 unittest {
-    import std.meta: AliasSeq;
-
     enum A { a, b }
     enum B { c, d }
 
-    static assert(
-        declareSupertype!([0, 2], false, A, B.d) == AliasSeq!(_HasSubtype!A(0), _HasSubtype!B(2)),
-    );
+    alias proofs = declareSupertype!([0, 2], false, A, B.d);
+    enum _HasSubtype!A proof0 = { offset: 0 };
+    enum _HasSubtype!B proof1 = { offset: 2, hasUnknownValue: true, unknownValue: B.d };
+    static assert(proofs[0] == proof0);
+    static assert(proofs[1] == proof1);
 }
 
 package alias SubtypeInfo = _HasSubtype!void;
 
 SubtypeInfo _calcSubtypeInfo(From, Mid)(_HasSubtype!Mid proof) {
-    enum next = _subtypeInfo!(From, Mid);
-    return SubtypeInfo(proof.offset + next.offset, proof.allowDowncast & next.allowDowncast);
+    static if (is(From == Mid))
+        return SubtypeInfo(
+            proof.offset, proof.allowDowncast, proof.hasUnknownValue, proof.unknownValue,
+        );
+    else {
+        auto result = _subtypeInfo!(From, Mid);
+        result.offset += proof.offset;
+        result.allowDowncast &= proof.allowDowncast;
+        return result;
+    }
 }
 
 /// Recursively search for `From` in `To`'s descendants and return the offset that needs to be
 /// added to a value to convert it from `From` to `To`.
 template _subtypeInfo(From, To) {
-    static if (is(From == To))
-        enum SubtypeInfo _subtypeInfo = { allowDowncast: true };
-    else {
-        // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
-        // always constructed correctly. An enum cannot have duplicate members, therefore,
-        // the relationship graph is actually a tree. And in a tree, there is a single path between
-        // any two nodes. All things considered, `enum _subtypeInfo` below will be defined
-        // at most once.
-        static foreach (uda; __traits(getAttributes, To))
-            static if (__traits(compiles, _calcSubtypeInfo!From(uda)))
-                enum _subtypeInfo = _calcSubtypeInfo!From(uda);
-    }
+    // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
+    // always constructed correctly. An enum cannot have duplicate members, therefore,
+    // the relationship graph is actually a tree. And in a tree, there is a single path between
+    // any two nodes. All things considered, `enum _subtypeInfo` below will be defined
+    // at most once.
+    static foreach (uda; __traits(getAttributes, To))
+        static if (__traits(compiles, _calcSubtypeInfo!From(uda)))
+            enum _subtypeInfo = _calcSubtypeInfo!From(uda);
 }
 
 package template subtypeInfo(From, To) {
     import std.traits: Unqual;
 
-    enum subtypeInfo = _subtypeInfo!(Unqual!From, Unqual!To);
+    static if (is(Unqual!From == Unqual!To))
+        enum subtypeInfo = SubtypeInfo.init;
+    else
+        enum subtypeInfo = _subtypeInfo!(Unqual!From, Unqual!To);
 }
 
 version (unittest) { // D <2.082 allows to attach attributes only to global enums.
