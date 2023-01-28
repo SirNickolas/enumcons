@@ -1,5 +1,8 @@
 module enumcons.generators;
 
+static if (__VERSION__ >= 2_092)
+    version = EnumCons_ModernAttributes;
+
 private nothrow pure @safe:
 
 package struct GenResult {
@@ -8,7 +11,7 @@ package struct GenResult {
     bool allowDowncast;
 }
 
-string _generateOne(E)(in string attrPrefix, long offset) {
+string _generateOne(E)(in string gensym, long offset) {
     import std.conv: to;
     import std.meta: Alias;
 
@@ -18,13 +21,15 @@ string _generateOne(E)(in string attrPrefix, long offset) {
         // Attributes on enum members are supported since 2.082.
         enum attrCount = __traits(getAttributes, member).length;
         static if (attrCount) {
-            static if (__VERSION__ >= 2_092)
-                result ~= attrPrefix ~ j.stringof ~ ' ';
+            version (EnumCons_ModernAttributes)
+                result ~= '@' ~ gensym ~ j.stringof ~ ' ';
             else {
-                // In D >=2.082 <2.092, we have to attach attributes individually.
+                // In D <2.092, sequences are not flattened when they appear as attributes.
+                // We have to attach their elements individually.
+                result ~= `@(`;
                 foreach (k; 0 .. attrCount)
-                    result ~= attrPrefix ~ j.stringof ~ k.to!string ~ size_t.init.stringof[1 .. $];
-                result ~= ' ';
+                    result ~= gensym ~ j.stringof ~ '[' ~ k.to!string ~ `],`;
+                result ~= ')';
             }
         }
 
@@ -48,7 +53,7 @@ version (unittest) {
 unittest {
     enum E { b, c, a, d = -4, e, f = 10, g, h = 1 }
 
-    assert(_generateOne!E(`@b0LU`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
+    assert(_generateOne!E(`b0LU`, 2) == `b=2,c=3,a=4,d=-2,e=-1,f=12,g=13,h=3,`);
 }
 
 static if (__VERSION__ >= 2_082)
@@ -57,22 +62,22 @@ unittest {
     static assert(__traits(getAttributes, E.b).length); // D <2.093.
     static assert(__traits(getAttributes, E.e).length);
 
-    static if (__VERSION__ >= 2_092)
-        assert(_generateOne!E(`@f` ~ size_t.init.stringof, 1) ==
+    version (EnumCons_ModernAttributes)
+        assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
             _tr(`f=1,a=2,@f0u2u b=-1,c=0,d=1,@f0u5u e=3,`),
         );
     else
-        assert(_generateOne!E(`@f` ~ size_t.init.stringof, 1) ==
-            _tr(`f=1,a=2,@f0u2u0u b=-1,c=0,d=1,@f0u5u0u@f0u5u1u e=3,`),
+        assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
+            _tr(`f=1,a=2,@(f0u2u[0],)b=-1,c=0,d=1,@(f0u5u[0],f0u5u[1],)e=3,`),
         );
 }
 
-package GenResult merge(enums...)(in string prefix) {
+package GenResult merge(enums...)(in string gensym) {
     import enumcons.utils: TypeOf;
 
     string code;
     static foreach (i, e; enums)
-        code ~= _generateOne!(TypeOf!e)('@' ~ prefix ~ i.stringof, 0);
+        code ~= _generateOne!(TypeOf!e)(gensym ~ i.stringof, 0);
     return GenResult(code, new long[enums.length], enums.length <= 1);
 }
 
@@ -94,10 +99,14 @@ unittest {
     static assert(__traits(getAttributes, A.c).length); // D <2.093.
     static assert(__traits(getAttributes, B.f).length);
 
-    static if (__VERSION__ >= 2_092)
-        assert(merge!(A, B)(`a`).code == _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=3,`));
+    version (EnumCons_ModernAttributes)
+        assert(merge!(A, B)(`a`).code ==
+            _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=3,`),
+        );
     else
-        assert(merge!(A, B)(`a`).code == _tr(`a=0,@a0u1u0u c=-2,b=4,d=-10,e=-9,@a1u2u0u f=3,`));
+        assert(merge!(A, B)(`a`).code ==
+            _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=3,`),
+        );
 }
 
 struct _Point {
@@ -118,7 +127,7 @@ template _getPoints(e) {
         alias _getPoints = AliasSeq!(_Point(long.min), _Point(E.max, true), _Point(E.min));
 }
 
-package GenResult unite(enums...)(in string prefix) {
+package GenResult unite(enums...)(in string gensym) {
     static if (enums.length >= 2) {
         import std.conv: to;
         import std.meta: staticMap, staticSort;
@@ -131,7 +140,7 @@ package GenResult unite(enums...)(in string prefix) {
             );
     }
 
-    auto result = merge!enums(prefix);
+    auto result = merge!enums(gensym);
     result.allowDowncast = true;
     return result;
 }
@@ -154,10 +163,14 @@ unittest {
     static assert(__traits(getAttributes, A.c).length); // D <2.093.
     static assert(__traits(getAttributes, B.f).length);
 
-    static if (__VERSION__ >= 2_092)
-        assert(unite!(A, B)(`a`).code == _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=-3,`));
+    version (EnumCons_ModernAttributes)
+        assert(unite!(A, B)(`a`).code ==
+            _tr(`a=0,@a0u1u c=-2,b=4,d=-10,e=-9,@a1u2u f=-3,`),
+        );
     else
-        assert(unite!(A, B)(`a`).code == _tr(`a=0,@a0u1u0u c=-2,b=4,d=-10,e=-9,@a1u2u0u f=-3,`));
+        assert(unite!(A, B)(`a`).code ==
+            _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=-3,`),
+        );
 }
 
 unittest {
@@ -184,7 +197,7 @@ unittest {
     static assert(!__traits(compiles, unite!(C, NonPositive)(`a`)));
 }
 
-package GenResult concat(enums...)(in string prefix) {
+package GenResult concat(enums...)(in string gensym) {
     import std.exception: assumeUnique;
 
     string code;
@@ -195,7 +208,7 @@ package GenResult concat(enums...)(in string prefix) {
             alias E = typeof(e);
         static if (i)
             offset -= E.min;
-        code ~= _generateOne!E('@' ~ prefix ~ i.stringof, offset);
+        code ~= _generateOne!E(gensym ~ i.stringof, offset);
         offset += E.max + 1L;
         offsets[i + 1] = offset;
     }}
@@ -221,13 +234,13 @@ unittest {
     static assert(__traits(getAttributes, B.z).length);
     static assert(__traits(getAttributes, B.w).length);
 
-    static if (__VERSION__ >= 2_092)
+    version (EnumCons_ModernAttributes)
         assert(concat!(A, B)(`a`).code ==
             _tr(`a=0,@a0u1u b=-1,c=0,d=1,x=4,y=2,@a1u2u z=3,@a1u3u w=5,`),
         );
     else
         assert(concat!(A, B)(`a`).code ==
-            _tr(`a=0,@a0u1u0u b=-1,c=0,d=1,x=4,y=2,@a1u2u0u z=3,@a1u3u0u@a1u3u1u w=5,`),
+            _tr(`a=0,@(a0u1u[0],)b=-1,c=0,d=1,x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,`),
         );
 }
 
@@ -235,14 +248,14 @@ package template concatInitLast(enums...) {
     static if (enums.length <= 1)
         alias concatInitLast = merge!enums;
     else
-        GenResult concatInitLast(in string prefix) {
+        GenResult concatInitLast(in string gensym) {
             import enumcons.utils: TypeOf;
 
             enum n = enums.length - 1;
-            auto result = concat!(enums[0 .. n])(prefix);
+            auto result = concat!(enums[0 .. n])(gensym);
             alias Last = TypeOf!(enums[n]);
             result.code = _generateOne!Last(
-                '@' ~ prefix ~ n.stringof,
+                gensym ~ n.stringof,
                 result.offsets[n] - Last.min,
             ) ~ result.code;
             return result;
@@ -268,12 +281,12 @@ unittest {
     static assert(__traits(getAttributes, B.z).length);
     static assert(__traits(getAttributes, B.w).length);
 
-    static if (__VERSION__ >= 2_092)
+    version (EnumCons_ModernAttributes)
         assert(concatInitLast!(A, B)(`a`).code ==
             _tr(`x=4,y=2,@a1u2u z=3,@a1u3u w=5,a=0,@a0u1u b=-1,c=0,d=1,`),
         );
     else
         assert(concatInitLast!(A, B)(`a`).code ==
-            _tr(`x=4,y=2,@a1u2u0u z=3,@a1u3u0u@a1u3u1u w=5,a=0,@a0u1u0u b=-1,c=0,d=1,`),
+            _tr(`x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],@a1u3u[1],)w=5,a=0,@(a0u1u[0],)b=-1,c=0,d=1,`),
         );
 }

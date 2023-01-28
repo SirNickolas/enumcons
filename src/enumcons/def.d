@@ -24,7 +24,7 @@ template _Enum(alias generateMembers, Base, enums...) {
     import std.traits: OriginalType;
 
     // Choose the longest member as prefix to avoid name collision.
-    enum prefix = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
+    enum gensym = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
     static foreach (i, E; staticMap!(TypeOf, enums)) {
         static assert(E.sizeof <= 8,
             '`' ~ E.stringof ~ "`'s original type is `" ~ OriginalType!E.stringof ~
@@ -34,32 +34,24 @@ template _Enum(alias generateMembers, Base, enums...) {
         // Attributes on enum members are supported since 2.082.
         // TODO: Drop `@unknownValue` attributes from source enums.
         static foreach (j, memberName; __traits(allMembers, E))
-            static if (__traits(getAttributes, __traits(getMember, E, memberName)).length) {
-                static if (__VERSION__ >= 2_092)
+            static if (__traits(getAttributes, __traits(getMember, E, memberName)).length)
                 mixin(
-                    `alias ` ~ prefix ~ i.stringof ~ j.stringof ~
-                    ` = __traits(getAttributes, E.` ~ memberName ~ `);`
+                    `alias ` ~ gensym ~ i.stringof ~ j.stringof ~
+                    // `AliasSeq` for D <2.084.
+                    ` = AliasSeq!(__traits(getAttributes, E.` ~ memberName ~ `));`
                 );
-                else {
-                    // D >=2.082 <2.092 do not flatten tuples when they appear as attributes.
-                    // We have to load them into separate variables and attach individually.
-                    static foreach (k, attr;
-                        __traits(getAttributes, __traits(getMember, E, memberName))
-                    ) mixin(
-                        `alias ` ~ prefix ~ i.stringof ~ j.stringof ~ k.stringof ~ ` = attr;`
-                    );
-                }
-            }
     }
     // `Base` may be specified explicitly by the user, but it may also be deduced from
     // the arguments - and will definitely be larger than 8 bytes if one of them is. To give a more
     // precise error message for the latter case, we check the arguments first.
     static assert(Base.sizeof <= 8, "`cent` and `ucent` enums are unsupported");
 
-    enum generated = generateMembers!enums(prefix);
+    enum generated = generateMembers!enums(gensym);
     enum offsets = generated.offsets; // D <2.078 requires dedicated variables for them.
     enum allowDowncast = generated.allowDowncast;
     mixin(
+        // If you have a use case that requires inheriting attributes from all source enums (not
+        // just the last), please let me know!
         `@(declareSupertype!(offsets, allowDowncast, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {` ~ generated.code ~ '}'
