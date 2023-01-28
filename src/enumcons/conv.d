@@ -75,6 +75,36 @@ nothrow @nogc unittest {
     static assert(!__traits(compiles, A.a.is_!C));
 }
 
+To to(To, From)(From e) nothrow @nogc
+if (
+    is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
+    isEnumPossiblyConvertible!(From, To) && canEnumHaveUnknownValue!(From, To)
+) {
+    import enumcons.type_system: subtypeInfo;
+
+    enum info = subtypeInfo!(To, From);
+    // TODO: Optimize.
+    if (e.is_!To)
+        return cast(To)(e - info.offset);
+    return info.unknownValue;
+}
+
+nothrow @nogc unittest {
+    enum A { a = 3, b }
+    enum B { x, y }
+    alias C = Concat!(A.a, B.y);
+
+    assert(C.a.to!A == A.a);
+    assert(C.b.to!A == A.b);
+    assert(C.x.to!A == A.a);
+    assert(C.y.to!A == A.a);
+
+    assert(C.a.to!B == B.y);
+    assert(C.b.to!B == B.y);
+    assert(C.x.to!B == B.x);
+    assert(C.y.to!B == B.y);
+}
+
 To assertTo(To, From)(From e) nothrow @nogc
 if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&

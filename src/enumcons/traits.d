@@ -122,12 +122,14 @@ unittest {
     static assert(!isEnumPossiblyConvertible!(A, M1));
 }
 
-package template prettyName(alias T: X!args, alias X, args...) {
-    import std.array: join;
-    import std.meta: staticMap;
+template canEnumHaveUnknownValue(From, To)
+if (
+    is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
+    isEnumPossiblyConvertible!(From, To)
+) {
+    import enumcons.type_system: subtypeInfo;
 
-    enum prettyName =
-        __traits(identifier, X) ~ `!(` ~ [staticMap!(.prettyName, args)].join(`, `) ~ ')';
+    enum canEnumHaveUnknownValue = subtypeInfo!(To, From).hasUnknownValue;
 }
 
 template _isCallable(alias func) {
@@ -140,6 +142,14 @@ template _isCallable(alias func) {
         enum _isCallable = isCallable!(typeof(&func!()));
     else
         enum _isCallable = isCallable!func;
+}
+
+package template prettyName(alias T: X!args, alias X, args...) {
+    import std.array: join;
+    import std.meta: staticMap;
+
+    enum prettyName =
+        __traits(identifier, X) ~ `!(` ~ [staticMap!(.prettyName, args)].join(`, `) ~ ')';
 }
 
 package template prettyName(alias x) {
