@@ -14,7 +14,7 @@ package struct GenResult {
 string _generateOne(E)(in string gensym, long offset) {
     import std.conv: to;
     import std.meta: Alias, AliasSeq;
-    import enumcons.utils: unknownValue;
+    import enumcons.type_system: unknownValue;
 
     string result;
     static foreach (int j, memberName; __traits(allMembers, E)) {{
@@ -55,7 +55,7 @@ unittest {
 
 static if (__VERSION__ >= 2_082)
 unittest {
-    import enumcons.utils: unknownValue;
+    import enumcons.type_system: unknownValue;
 
     mixin(q{
         enum U {

@@ -2,6 +2,10 @@ module enumcons.type_system;
 
 private nothrow pure @safe @nogc:
 
+public struct unknownValue {
+    string memberName;
+}
+
 struct _HasSubtype(E) {
     long offset;
     bool allowDowncast;

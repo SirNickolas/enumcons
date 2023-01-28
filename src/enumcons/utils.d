@@ -2,10 +2,6 @@ module enumcons.utils;
 
 package nothrow pure @safe:
 
-public struct unknownValue {
-    string memberName;
-}
-
 /// Like `typeof(x)`, but does nothing if `x` is already a type.
 template TypeOf(alias x) {
     static if (is(x))

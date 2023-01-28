@@ -3,7 +3,10 @@ module enumcons.def;
 import std.meta: AliasSeq, allSatisfy;
 import enumcons.generators: concat, concatInitLast, merge, unite;
 import enumcons.utils: TypeOf;
-public import enumcons.utils: fixEnumsUntilD2093, unknownValue;
+public {
+    import enumcons.type_system: unknownValue;
+    import enumcons.utils: fixEnumsUntilD2093;
+}
 
 private nothrow pure @safe @nogc:
 
