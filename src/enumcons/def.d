@@ -3,7 +3,7 @@ module enumcons.def;
 import std.meta: AliasSeq, allSatisfy;
 import enumcons.generators: concat, concatInitLast, merge, unite;
 import enumcons.utils: TypeOf;
-public import enumcons.utils: unknownValue;
+public import enumcons.utils: fixEnumsUntilD2093, unknownValue;
 
 private nothrow pure @safe @nogc:
 
@@ -55,15 +55,9 @@ template _Enum(alias generateMembers, Base, enums...) {
         // just the last), please let me know!
         `@(declareSupertype!(offsets, allowDowncast, enums))
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
-        enum _Enum: Base {` ~ generated.code ~ '}'
+        enum _Enum: Base {` ~ generated.code ~ '}' ~
+        fixEnumsUntilD2093(`_Enum`)
     );
-
-    static if (__VERSION__ < 2_093) {
-        // Access all attributes of the newly created enum. Without that, D <2.093 resolves their
-        // identifiers in a wrong scope.
-        static foreach (memberName; __traits(allMembers, _Enum))
-            static if (__traits(getAttributes, __traits(getMember, _Enum, memberName)).length) { }
-    }
 }
 
 enum _isEnumOrEnumMember(alias x) = is(x == enum) || is(typeof(x) == enum);

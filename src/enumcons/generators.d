@@ -3,6 +3,9 @@ module enumcons.generators;
 static if (__VERSION__ < 2_092)
     version = EnumCons_OldAttributes;
 
+version (unittest)
+    import enumcons.utils: fixEnumsUntilD2093;
+
 private nothrow pure @safe:
 
 package struct GenResult {
@@ -92,9 +95,9 @@ unittest {
 
 static if (__VERSION__ >= 2_082)
 unittest {
-    mixin(q{enum E { f, a, @E b = -2, c, d, @(E, "") e = a + 1 }});
-    static assert(__traits(getAttributes, E.b).length); // D <2.093.
-    static assert(__traits(getAttributes, E.e).length);
+    mixin(q{
+        enum E { f, a, @E b = -2, c, d, @(E, "") e = a + 1 }
+    } ~ fixEnumsUntilD2093(`E`));
 
     assert(_generateOne!E('f' ~ size_t.init.stringof, 1) ==
         _tr(`f=1,a=2,@(f0u2u[0],)b=-1,c=0,d=1,@(f0u5u[0],f0u5u[1],)e=3,`),
@@ -124,9 +127,7 @@ unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = 3 }
-    });
-    static assert(__traits(getAttributes, A.c).length); // D <2.093.
-    static assert(__traits(getAttributes, B.f).length);
+    } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(merge!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=3,`));
 }
@@ -181,9 +182,7 @@ unittest {
     mixin(q{
         enum A { a, @B c = -2, b = 4 }
         enum B { d = -10, e, @A f = -3 }
-    });
-    static assert(__traits(getAttributes, A.c).length); // D <2.093.
-    static assert(__traits(getAttributes, B.f).length);
+    } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(unite!(A, B)(`a`).code == _tr(`a=0,@(a0u1u[0],)c=-2,b=4,d=-10,e=-9,@(a1u2u[0],)f=-3,`));
 }
@@ -244,10 +243,7 @@ unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -2, @A z, @A @B w = x + 1 }
-    });
-    static assert(__traits(getAttributes, A.b).length); // D <2.093.
-    static assert(__traits(getAttributes, B.z).length);
-    static assert(__traits(getAttributes, B.w).length);
+    } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(concat!(A, B)(`a`).code ==
         _tr(`a=0,@(a0u1u[0],)b=-1,c=0,d=1,x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,`),
@@ -286,10 +282,7 @@ unittest {
     mixin(q{
         enum A { a, @A b = -1, c, d }
         enum B { x, y = -2, @A z, @A @B w = x + 1 }
-    });
-    static assert(__traits(getAttributes, A.b).length); // D <2.093.
-    static assert(__traits(getAttributes, B.z).length);
-    static assert(__traits(getAttributes, B.w).length);
+    } ~ fixEnumsUntilD2093(`A`, `B`));
 
     assert(concatInitLast!(A, B)(`a`).code ==
         _tr(`x=4,y=2,@(a1u2u[0],)z=3,@(a1u3u[0],a1u3u[1],)w=5,a=0,@(a0u1u[0],)b=-1,c=0,d=1,`),
