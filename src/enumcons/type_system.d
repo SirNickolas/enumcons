@@ -93,7 +93,7 @@ struct _HasSubtype(E) {
     long offset;
     bool allowDowncast;
     bool hasUnknownValue;
-    long unknownValue;
+    E unknownValue = void;
 }
 
 package template declareSupertype(immutable(long)[ ] offsets, bool allowDowncast, subtypes...) {
@@ -138,41 +138,30 @@ unittest {
     static assert(proofs[1] == proof1);
 }
 
-package alias SubtypeInfo = _HasSubtype!void;
-
-SubtypeInfo _calcSubtypeInfo(From, Mid)(_HasSubtype!Mid proof) {
-    static if (is(From == Mid))
-        return SubtypeInfo(
-            proof.offset, proof.allowDowncast, proof.hasUnknownValue, proof.unknownValue,
-        );
+_HasSubtype!Sub _proveHasSubtype(Sub, Mid)(in _HasSubtype!Mid premise) {
+    static if (is(Mid == Sub))
+        return premise;
     else {
-        auto result = _subtypeInfo!(From, Mid);
-        result.offset += proof.offset;
-        result.allowDowncast &= proof.allowDowncast;
-        return result;
+        // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
+        // always constructed correctly. An enum cannot have duplicate members, therefore,
+        // the relationship graph is actually a tree. And in a tree, there is a single path between
+        // any two nodes. All things considered, the `conclusion` variable below will be defined
+        // at most once.
+        static foreach (uda; __traits(getAttributes, Mid))
+            static if (__traits(compiles, _proveHasSubtype!Sub(uda))) {
+                auto conclusion = _proveHasSubtype!Sub(uda);
+                conclusion.offset += premise.offset;
+                conclusion.allowDowncast &= premise.allowDowncast;
+                return conclusion;
+            }
     }
 }
 
-/// Recursively search for `From` in `To`'s descendants and return the offset that needs to be
-/// added to a value to convert it from `From` to `To`.
-template _subtypeInfo(From, To) {
-    // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
-    // always constructed correctly. An enum cannot have duplicate members, therefore,
-    // the relationship graph is actually a tree. And in a tree, there is a single path between
-    // any two nodes. All things considered, `enum _subtypeInfo` below will be defined
-    // at most once.
-    static foreach (uda; __traits(getAttributes, To))
-        static if (__traits(compiles, _calcSubtypeInfo!From(uda)))
-            enum _subtypeInfo = _calcSubtypeInfo!From(uda);
-}
-
-package template subtypeInfo(From, To) {
+package template subtypeInfo(Sub, Super) {
     import std.traits: Unqual;
 
-    static if (is(Unqual!From == Unqual!To))
-        enum subtypeInfo = SubtypeInfo.init;
-    else
-        enum subtypeInfo = _subtypeInfo!(Unqual!From, Unqual!To);
+    enum _HasSubtype!(Unqual!Super) premise = { allowDowncast: true };
+    enum subtypeInfo = _proveHasSubtype!(Unqual!Sub)(premise);
 }
 
 version (unittest) { // D <2.082 allows to attach attributes only to global enums.

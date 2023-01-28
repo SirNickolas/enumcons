@@ -1,7 +1,7 @@
 module enumcons.generators;
 
 version (unittest)
-    import enumcons.utils: fixEnumsUntilD2093;
+import enumcons.utils: fixEnumsUntilD2093;
 
 private nothrow pure @safe:
 

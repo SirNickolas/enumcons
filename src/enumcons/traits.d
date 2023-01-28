@@ -71,9 +71,10 @@ unittest {
 
 template isEnumPossiblyConvertible(From, To)
 if (is(From == enum) && is(To == enum) && __traits(isIntegral, From, To)) {
+    import std.traits: Unqual;
     import enumcons.type_system: subtypeInfo;
 
-    static if (isEnumSubtype!(To, From))
+    static if (isEnumSubtype!(To, From) && !is(Unqual!From == Unqual!To))
         enum isEnumPossiblyConvertible = subtypeInfo!(To, From).allowDowncast;
     else
         enum isEnumPossiblyConvertible = false;
