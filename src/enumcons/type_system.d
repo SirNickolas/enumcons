@@ -6,6 +6,89 @@ public struct unknownValue {
     string memberName;
 }
 
+/++
+    Scan the enum for an `@unknownValue` annotation and return the member it points to. If there are
+    no such annotations, return `void`. If multiple, produce a compilation error.
++/
+template _typeBoundUnknownValue(E) {
+    import std.traits: Unqual;
+
+    // Process annotations of the enum itself.
+    static foreach (uda; __traits(getAttributes, E)) {
+        static assert(!is(Unqual!uda == unknownValue),
+            "When attached to a whole enum, `@unknownValue()` should specify the name of its member"
+        );
+        static if (is(Unqual!(typeof(uda)) == unknownValue))
+            enum _typeBoundUnknownValue = __traits(getMember, E, uda.memberName);
+    }
+    // Process annotations of the enum's members (2.082+).
+    static foreach (memberName; __traits(allMembers, E))
+        static foreach (uda; __traits(getAttributes, __traits(getMember, E, memberName))) {
+            static assert(!is(Unqual!(typeof(uda)) == unknownValue),
+                "When attached to a member, `@unknownValue` should be used without parentheses",
+            );
+            static if (is(Unqual!uda == unknownValue))
+                enum _typeBoundUnknownValue = __traits(getMember, E, memberName);
+        }
+}
+
+version (unittest) { // D <2.082 allows to attach attributes only to global enums.
+    enum U0 { a, b, c }
+
+    @unknownValue(`a`)
+    enum U1 { a, b, c }
+
+    @unknownValue(`c`)
+    enum U2 { a, b }
+
+    @unknownValue(`a`) @unknownValue(`b`)
+    enum U3 { a, b }
+
+    @unknownValue(`a`) @unknownValue(`a`)
+    enum U4 { a, b }
+
+    @unknownValue()
+    enum U5 { a }
+
+    @unknownValue
+    enum U6 { a }
+}
+
+unittest {
+    static assert(is(typeof(_typeBoundUnknownValue!U0) == void));
+    static assert(_typeBoundUnknownValue!U1 == U1.a);
+    static assert(!__traits(compiles, _typeBoundUnknownValue!U2));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!U3));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!U4));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!U5));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!U6));
+}
+
+static if (__VERSION__ >= 2_082)
+unittest {
+    mixin(q{
+        enum A { @unknownValue a, b, c }
+        enum B { @unknownValue(`a`) a }
+        enum C { @unknownValue() a }
+        enum D { @unknownValue @unknownValue a }
+        enum E { @unknownValue a, @unknownValue b }
+
+        @unknownValue(`a`)
+        enum F { @unknownValue a }
+
+        @unknownValue(`a`)
+        enum G { a, @unknownValue b }
+    });
+
+    static assert(_typeBoundUnknownValue!A == A.a);
+    static assert(!__traits(compiles, _typeBoundUnknownValue!B));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!C));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!D));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!E));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!F));
+    static assert(!__traits(compiles, _typeBoundUnknownValue!G));
+}
+
 struct _HasSubtype(E) {
     long offset;
     bool allowDowncast;
