@@ -17,32 +17,12 @@ template TypeOf(alias x) {
     static assert(is(TypeOf!(E.a) == E));
 }
 
-static if (__VERSION__ >= 2_095)
-mixin(q{
-    template staticMapI(alias func, args...) {
-        import std.meta: AliasSeq;
+/// Like `std.typecons.Tuple` but stripped of all advanced features to keep compilation fast.
+struct Tuple(Types...) {
+    Types expand;
 
-        alias staticMapI = AliasSeq!();
-        static foreach (i, arg; args)
-            staticMapI = AliasSeq!(staticMapI, func!(i, arg));
-    }
-});
-else // Simple but slow.
-    template staticMapI(alias func, args...) {
-        import std.meta: AliasSeq;
-
-        template loop(tailArgs...) {
-            static if (tailArgs.length)
-                alias loop = AliasSeq!(
-                    func!(args.length - tailArgs.length, tailArgs[0]),
-                    loop!(tailArgs[1 .. $]),
-                );
-            else
-                alias loop = AliasSeq!();
-        }
-
-        alias staticMapI = loop!args;
-    }
+    alias expand this;
+}
 
 /++
     Generate D code that fixes enum declarations. You have to mix it in if your enums' members have

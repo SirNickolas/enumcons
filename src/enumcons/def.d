@@ -50,12 +50,10 @@ template _Enum(alias generateMembers, Base, enums...) {
     static assert(Base.sizeof <= 8, "`cent` and `ucent` enums are unsupported");
 
     enum generated = generateMembers!enums(gensym);
-    enum offsets = generated.offsets; // D <2.078 requires dedicated variables for them.
-    enum allowDowncast = generated.allowDowncast;
     mixin(
         // If you have a use case that requires inheriting attributes from all source enums (not
         // just the last), please let me know!
-        `@(declareSupertype!(offsets, allowDowncast, enums))
+        `@AliasSeq!(declareSupertype!enums(generated.offsets, generated.allowDowncast).expand)
         @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {` ~ generated.code ~ '}' ~
         fixEnumsUntilD2093(`_Enum`)
