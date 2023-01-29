@@ -94,8 +94,11 @@ unittest {
 struct _HasSubtype(E) {
     long offset;
     bool allowDowncast;
-    bool hasUnknownValue;
-    E unknownValue = void;
+    static if (__traits(compiles, E.init)) {
+        bool hasUnknownValue;
+        E unknownValue;
+    } else
+        enum hasUnknownValue = false;
 }
 
 alias _ProofFor(alias e) = _HasSubtype!(Unqual!(TypeOf!e));
