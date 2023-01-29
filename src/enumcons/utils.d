@@ -1,5 +1,7 @@
 module enumcons.utils;
 
+import std.typecons: Flag;
+
 package nothrow pure @safe:
 
 /// Like `typeof(x)`, but does nothing if `x` is already a type.
@@ -22,6 +24,10 @@ struct Tuple(Types...) {
     Types expand;
 
     alias expand this;
+}
+
+Flag!name yesNo(string name)(bool value) @nogc {
+    return cast(Flag!name)value;
 }
 
 /++

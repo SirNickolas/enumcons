@@ -1,5 +1,7 @@
 module enumcons.generators;
 
+import std.typecons: Flag, Yes;
+
 version (unittest)
 import enumcons.utils: fixEnumsUntilD2093;
 
@@ -8,7 +10,7 @@ private nothrow pure @safe:
 package struct GenResult {
     string code;
     immutable(long)[ ] offsets;
-    bool allowDowncast;
+    Flag!`allowDowncast` allowDowncast;
 }
 
 string _generateOne(E)(in string gensym, long offset) {
@@ -70,12 +72,12 @@ unittest {
 }
 
 package GenResult merge(enums...)(in string gensym) {
-    import enumcons.utils: TypeOf;
+    import enumcons.utils: TypeOf, yesNo;
 
     string code;
     static foreach (uint i, e; enums)
         code ~= _generateOne!(TypeOf!e)(gensym ~ i.stringof, 0);
-    return GenResult(code, new long[enums.length], enums.length <= 1);
+    return GenResult(code, new long[enums.length], yesNo!`allowDowncast`(enums.length <= 1));
 }
 
 unittest {
@@ -129,7 +131,7 @@ package GenResult unite(enums...)(in string gensym) {
     }
 
     auto result = merge!enums(gensym);
-    result.allowDowncast = true;
+    result.allowDowncast = Yes.allowDowncast;
     return result;
 }
 
@@ -191,7 +193,7 @@ package GenResult concat(enums...)(in string gensym) {
         offset += E.max + 1L;
         offsets[i + 1] = offset;
     }}
-    return GenResult(code, (() @trusted => assumeUnique(offsets))(), true);
+    return GenResult(code, (() @trusted => assumeUnique(offsets))(), Yes.allowDowncast);
 }
 
 unittest {

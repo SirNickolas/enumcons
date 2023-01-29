@@ -1,7 +1,9 @@
 module enumcons.traits;
 
-version (unittest)
-import enumcons.def: Concat, ConcatInitLast, Merge, Unite;
+version (unittest) {
+    import enumcons.def: Concat, ConcatInitLast, Merge, Unite;
+    import enumcons.type_system: unknownValue;
+}
 
 nothrow pure @safe @nogc:
 
@@ -75,7 +77,7 @@ if (is(From == enum) && is(To == enum) && __traits(isIntegral, From, To)) {
     import enumcons.type_system: subtypeInfo;
 
     static if (isEnumSubtype!(To, From) && !is(Unqual!From == Unqual!To))
-        enum isEnumPossiblyConvertible = subtypeInfo!(To, From).allowDowncast;
+        enum bool isEnumPossiblyConvertible = subtypeInfo!(To, From).allowDowncast;
     else
         enum isEnumPossiblyConvertible = false;
 }
@@ -88,6 +90,7 @@ unittest {
     alias C = Concat!(A, B);
 
     static assert(isEnumPossiblyConvertible!(C, A));
+    static assert(is(typeof(isEnumPossiblyConvertible!(C, A)) == bool));
 
     static assert(!isEnumPossiblyConvertible!(A, A));
     static assert(!isEnumPossiblyConvertible!(C, C));
@@ -129,7 +132,26 @@ if (
 ) {
     import enumcons.type_system: subtypeInfo;
 
-    enum canEnumHaveUnknownValue = subtypeInfo!(To, From).hasUnknownValue;
+    enum bool canEnumHaveUnknownValue = subtypeInfo!(To, From).hasUnknownValue;
+}
+
+version (unittest) { // D <2.082 allows to attach attributes only to global enums.
+    @unknownValue(`a`)
+    enum U { b, a, c }
+}
+
+unittest {
+    enum X { x, y }
+    alias C = Concat!(U, X);
+
+    static assert(canEnumHaveUnknownValue!(C, U));
+    static assert(is(typeof(canEnumHaveUnknownValue!(C, U)) == bool));
+
+    static assert(!canEnumHaveUnknownValue!(C, X));
+    static assert(!__traits(compiles, canEnumHaveUnknownValue!(U, X)));
+    static assert(!__traits(compiles, canEnumHaveUnknownValue!(X, U)));
+    static assert(!__traits(compiles, canEnumHaveUnknownValue!(U, C)));
+    static assert(!__traits(compiles, canEnumHaveUnknownValue!(X, C)));
 }
 
 template _isCallable(alias func) {

@@ -2,6 +2,7 @@ module enumcons.type_system;
 
 import std.meta: staticMap;
 import std.traits: Unqual;
+import std.typecons: Flag, No, Yes;
 import enumcons.utils: Tuple, TypeOf;
 
 private nothrow pure @safe @nogc:
@@ -93,32 +94,33 @@ unittest {
 
 struct _HasSubtype(E) {
     long offset;
-    bool allowDowncast;
+    Flag!`allowDowncast` allowDowncast;
     static if (__traits(compiles, E.init)) {
-        bool hasUnknownValue;
+        Flag!`hasUnknownValue` hasUnknownValue;
         E unknownValue;
     } else
-        enum hasUnknownValue = false;
+        enum hasUnknownValue = No.hasUnknownValue;
 }
 
 alias _ProofFor(alias e) = _HasSubtype!(Unqual!(TypeOf!e));
 
-_ProofFor!enumOrValue _createProof(alias enumOrValue)(long offset, bool allowDowncast) {
+_ProofFor!enumOrValue
+_createProof(alias enumOrValue)(long offset, Flag!`allowDowncast` allowDowncast) {
     static if (is(Unqual!enumOrValue E)) {
         alias unknownValue = _typeBoundUnknownValue!E;
         static if (is(typeof(unknownValue) == void))
             return _HasSubtype!E(offset, allowDowncast);
         else
-            return _HasSubtype!E(offset, allowDowncast, true, unknownValue);
+            return _HasSubtype!E(offset, allowDowncast, Yes.hasUnknownValue, unknownValue);
     } else {
         // The unknown value was specified explicitly. Do not even check whether `@unknownValue`
         // annotations are attached to the type correctly.
-        return typeof(return)(offset, allowDowncast, true, enumOrValue);
+        return typeof(return)(offset, allowDowncast, Yes.hasUnknownValue, enumOrValue);
     }
 }
 
 package Tuple!(staticMap!(_ProofFor, subtypes))
-declareSupertype(subtypes...)(in long[ ] offsets, bool allowDowncast) {
+declareSupertype(subtypes...)(in long[ ] offsets, Flag!`allowDowncast` allowDowncast) {
     typeof(return) result = void;
     static foreach (i, enumOrValue; subtypes)
         result[i] = _createProof!enumOrValue(offsets[i], allowDowncast);
@@ -129,9 +131,13 @@ unittest {
     enum A { a, b }
     enum B { c, d }
 
-    enum proofs = declareSupertype!(A, B.d)([0, 2], false);
+    enum proofs = declareSupertype!(A, B.d)([0, 2], No.allowDowncast);
     enum _HasSubtype!A proof0 = { offset: 0 };
-    enum _HasSubtype!B proof1 = { offset: 2, hasUnknownValue: true, unknownValue: B.d };
+    enum _HasSubtype!B proof1 = {
+        offset: 2,
+        hasUnknownValue: Yes.hasUnknownValue,
+        unknownValue: B.d,
+    };
     static assert(proofs[0] == proof0);
     static assert(proofs[1] == proof1);
 }
@@ -155,10 +161,8 @@ _HasSubtype!Sub _proveHasSubtype(Sub, Mid)(in _HasSubtype!Mid premise) {
     }
 }
 
-package template subtypeInfo(Sub, Super) {
-    enum _HasSubtype!(Unqual!Super) premise = { allowDowncast: true };
-    enum subtypeInfo = _proveHasSubtype!(Unqual!Sub)(premise);
-}
+package enum subtypeInfo(Sub, Super) =
+    _proveHasSubtype!(Unqual!Sub)(_HasSubtype!(Unqual!Super)(0, Yes.allowDowncast));
 
 version (unittest) { // D <2.082 allows to attach attributes only to global enums.
     import std.meta: AliasSeq;
@@ -173,22 +177,22 @@ version (unittest) { // D <2.082 allows to attach attributes only to global enum
     enum M { m }
     enum X;
 
-    @AliasSeq!(declareSupertype!(A, C)([0, 2], true).expand)
+    @AliasSeq!(declareSupertype!(A, C)([0, 2], Yes.allowDowncast).expand)
     enum AC { a, b, c }
 
-    @AliasSeq!(declareSupertype!(AC, D)([0, 3], true).expand)
+    @AliasSeq!(declareSupertype!(AC, D)([0, 3], Yes.allowDowncast).expand)
     enum AD { a, b, c, d }
 
-    @AliasSeq!(declareSupertype!(G, H)([0, 1], true).expand)
+    @AliasSeq!(declareSupertype!(G, H)([0, 1], Yes.allowDowncast).expand)
     enum GJ { g, h, i, j }
 
-    @AliasSeq!(declareSupertype!(E, GJ)([0, 2], true).expand)
+    @AliasSeq!(declareSupertype!(E, GJ)([0, 2], Yes.allowDowncast).expand)
     enum EJ { e, f, g, h, i, j}
 
-    @AliasSeq!(declareSupertype!(EJ, K)([0, 6], true).expand)
+    @AliasSeq!(declareSupertype!(EJ, K)([0, 6], Yes.allowDowncast).expand)
     enum EL { e, f, g, h, i, j, k, l }
 
-    @AliasSeq!(declareSupertype!(AD, EL, M)([0, 4, 12], true).expand)
+    @AliasSeq!(declareSupertype!(AD, EL, M)([0, 4, 12], Yes.allowDowncast).expand)
     enum AM { a, b, c, d, e, f, g, h, i, j, k, l, m }
 }
 
