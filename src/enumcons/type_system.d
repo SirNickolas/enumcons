@@ -149,14 +149,14 @@ _HasSubtype!Sub _proveHasSubtype(Sub, Mid)(in _HasSubtype!Mid premise) {
         // `_HasSubtype` is `private`, `declareSupertype` is `package` so we can assume they are
         // always constructed correctly. An enum cannot have duplicate members, therefore,
         // the relationship graph is actually a tree. And in a tree, there is a single path between
-        // any two nodes. All things considered, the `conclusion` variable below will be defined
+        // any two nodes. All things considered, the `consequent` variable below will be defined
         // at most once.
         static foreach (uda; __traits(getAttributes, Mid))
             static if (__traits(compiles, _proveHasSubtype!Sub(uda))) {
-                auto conclusion = _proveHasSubtype!Sub(uda);
-                conclusion.offset += premise.offset;
-                conclusion.allowDowncast &= premise.allowDowncast;
-                return conclusion;
+                auto consequent = uda;
+                consequent.offset += premise.offset;
+                consequent.allowDowncast &= premise.allowDowncast;
+                return _proveHasSubtype!Sub(consequent); // Tail call at CTFE!.. Eventually.
             }
     }
 }
