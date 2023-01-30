@@ -7,6 +7,15 @@ import enumcons.def: Concat;
 
 pure @safe:
 
+private @property bool _isU32(ulong value) nothrow @nogc {
+    return value <= uint.max;
+}
+
+private @property bool _isI32(long value) nothrow @nogc {
+    return value == cast(int)value;
+}
+
+pragma(inline, true)
 To as(To, From)(From e) nothrow @nogc
 if (is(From == enum) && __traits(isIntegral, From, To) && isEnumUpcastable!(From, To)) {
     static if (is(From: To))
@@ -15,21 +24,16 @@ if (is(From == enum) && __traits(isIntegral, From, To) && isEnumUpcastable!(From
         import enumcons.type_system: subtypeInfo;
 
         enum long offset = subtypeInfo!(From, To).offset;
+        enum lo = From.min + offset; // lo <= result <= hi
+        enum hi = From.max + offset;
         static if (!offset)
-            return cast(To)e; // To be sure it is optimized no matter how stupid the compiler is.
-        else {
-            enum a = From.min, c = a + offset;
-            enum b = From.max, d = b + offset;
-            enum ai = cast(int)a, ci = cast(int)c;
-            enum bi = cast(int)b, di = cast(int)d;
-            // Try to do 32-bit arithmetics when possible.
-            static if (a == ai && b == bi && c == ci && d == di)
-                return cast(To)(cast(int)e + int(offset));
-            else static if (a == uint(ai) && b == uint(bi) && c == uint(ci) && d == uint(di))
-                return cast(To)(cast(uint)e + uint(offset));
-            else
-                return cast(To)(e + offset);
-        }
+            return cast(To)e; // Avoid excessive casting.
+        else static if (To.sizeof <= 4 || (lo._isU32 && hi._isU32)) // Prefer `movzx` over `movsx`.
+            return cast(To)(cast(uint)e + cast(uint)offset); // Add, then zero-extend or truncate.
+        else static if (lo._isI32 && hi._isI32)
+            return cast(To)(cast(int)e + cast(int)offset); // Add, then sign-extend.
+        else
+            return cast(To)(e + offset);
     }
 }
 
@@ -50,6 +54,22 @@ nothrow @nogc unittest {
     static assert(!__traits(compiles, C.d.as!B));
 }
 
+pragma(inline, true)
+private To _unsafeTo(To, From)(From e) nothrow @nogc {
+    import enumcons.type_system: subtypeInfo;
+
+    enum long offset = subtypeInfo!(To, From).offset;
+    static if (!offset)
+        return cast(To)e; // Avoid excessive casting.
+    else static if (To.sizeof <= 4 || (To.min._isU32 && To.max._isU32)) // Prefer `movzx`.
+        return cast(To)(cast(uint)e - cast(uint)offset); // Subtract, then zero-extend or truncate.
+    else static if (To.min._isI32 && To.max._isI32)
+        return cast(To)(cast(int)e - cast(int)offset); // Subtract, then sign-extend.
+    else
+        return cast(To)(e - offset);
+}
+
+pragma(inline, true)
 bool is_(Sub, Super)(Super e) nothrow @nogc
 if (
     is(Super == enum) && is(Sub == enum) && __traits(isIntegral, Super, Sub) &&
@@ -57,9 +77,18 @@ if (
 ) {
     import enumcons.type_system: subtypeInfo;
 
-    enum long offset = subtypeInfo!(Sub, Super).offset + Sub.min;
-    // TODO: Optimize.
-    return e - offset <= ulong(Sub.max - Sub.min);
+    enum long first = Sub.min + subtypeInfo!(Sub, Super).offset;
+    enum subRange = ulong(Sub.max) - ulong(Sub.min);
+    static if (Sub.min != Sub.max) {
+        static if (subRange._isU32)
+            return cast(uint)e - cast(uint)first <= uint(subRange);
+        else
+            return e - first <= subRange;
+    } else // An enum with the only member.
+        static if (Super.sizeof > 4 && subRange._isU32)
+            return cast(uint)e == cast(uint)first;
+        else
+            return e == cast(Super)first;
 }
 
 nothrow @nogc unittest {
@@ -80,13 +109,7 @@ if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
     isEnumDowncastable!(From, To) && !is(typeof(enumFallbackValue!(From, To)) == void)
 ) {
-    import enumcons.type_system: subtypeInfo;
-
-    enum info = subtypeInfo!(To, From);
-    // TODO: Optimize.
-    if (e.is_!To)
-        return cast(To)(e - info.offset);
-    return info.fallbackValue;
+    return e.is_!To ? e._unsafeTo!To : enumFallbackValue!(From, To);
 }
 
 nothrow @nogc unittest {
@@ -105,6 +128,7 @@ nothrow @nogc unittest {
     assert(C.y.to!B == B.y);
 }
 
+pragma(inline, true)
 To assertTo(To, From)(From e) nothrow @nogc
 if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
@@ -113,13 +137,7 @@ if (
 in {
     assert(e.is_!To, '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`');
 }
-do {
-    import enumcons.type_system: subtypeInfo;
-
-    enum long offset = subtypeInfo!(To, From).offset;
-    // TODO: Optimize.
-    return cast(To)(e - offset);
-}
+do { return e._unsafeTo!To; }
 
 nothrow @nogc unittest {
     enum A { a = 3 }
@@ -145,9 +163,8 @@ version (D_Exceptions) {
         is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
         isEnumDowncastable!(From, To)
     ) {
-        // TODO: Optimize.
         if (e.is_!To)
-            return e.assertTo!To;
+            return e._unsafeTo!To;
         enum msg = '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`';
         throw new EnumConvException(msg);
     }
