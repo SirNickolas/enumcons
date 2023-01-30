@@ -1,5 +1,6 @@
 module enumcons.generators;
 
+import std.range.primitives: empty;
 import std.typecons: Flag, Yes;
 
 version (unittest)
@@ -104,8 +105,6 @@ struct _Point {
     bool closed;
 }
 
-enum _cmpPoints(_Point a, _Point b) = a.pos != b.pos ? a.pos < b.pos : a.closed < b.closed;
-
 template _getPoints(e) {
     import std.meta: AliasSeq;
 
@@ -117,17 +116,26 @@ template _getPoints(e) {
         alias _getPoints = AliasSeq!(_Point(long.min), _Point(E.max, true), _Point(E.min));
 }
 
+// It's a template to avoid instantiating algorithms unless `unite` is called somewhere.
+string _checkDisjoint()(scope _Point[ ] events...) {
+    import std.algorithm.searching: findAdjacent;
+    import std.conv: to;
+    import enumcons.utils: sort;
+
+    const error = events
+        .sort!q{a.pos != b.pos ? a.pos < b.pos : a.closed < b.closed}(new _Point[events.length])
+        .findAdjacent!q{a.closed == b.closed};
+    return error.empty ? null : (
+        "Enums' ranges overlap: value `" ~ error[0].pos.to!string ~ "` is defined in multiple enums"
+    );
+}
+
 package GenResult unite(enums...)(in string gensym) {
     static if (enums.length >= 2) {
-        import std.conv: to;
-        import std.meta: staticMap, staticSort;
+        import std.meta: staticMap;
 
-        alias events = staticSort!(_cmpPoints, staticMap!(_getPoints, enums));
-        static foreach (j, p; events[1 .. $])
-            static assert(p.closed != events[j].closed, // Must not have two `open` events in a row.
-                "Enums' ranges overlap: value `" ~ p.pos.to!string ~
-                "` is defined in multiple enums",
-            );
+        enum error = _checkDisjoint(staticMap!(_getPoints, enums));
+        static assert(error.empty, error);
     }
 
     auto result = merge!enums(gensym);
