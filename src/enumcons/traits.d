@@ -5,9 +5,9 @@ version (unittest) {
     import enumcons.type_system: unknownValue;
 }
 
-nothrow pure @safe @nogc:
+private nothrow pure @safe @nogc:
 
-template isEnumSubtype(Sub, Super)
+public template isEnumSubtype(Sub, Super)
 if (is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super)) {
     import enumcons.type_system: subtypeInfo;
 
@@ -39,11 +39,11 @@ unittest {
     static assert(!__traits(compiles, isEnumSubtype!(C, int)));
 }
 
-template isEnumSafelyConvertible(From, To) if (is(From == enum) && __traits(isIntegral, From, To)) {
+public template isEnumUpcastable(From, To) if (is(From == enum) && __traits(isIntegral, From, To)) {
     static if (is(From: To))
-        enum isEnumSafelyConvertible = true;
+        enum isEnumUpcastable = true;
     else
-        enum isEnumSafelyConvertible = isEnumSubtype!(From, To);
+        enum isEnumUpcastable = isEnumSubtype!(From, To);
 }
 
 ///
@@ -53,33 +53,33 @@ unittest {
     enum X { x }
     alias C = Concat!(A, B);
 
-    static assert(isEnumSafelyConvertible!(A, C));
-    static assert(isEnumSafelyConvertible!(A, A));
-    static assert(isEnumSafelyConvertible!(C, C));
-    static assert(isEnumSafelyConvertible!(X, X));
-    static assert(isEnumSafelyConvertible!(A, int));
-    static assert(isEnumSafelyConvertible!(C, int));
+    static assert(isEnumUpcastable!(A, C));
+    static assert(isEnumUpcastable!(A, A));
+    static assert(isEnumUpcastable!(C, C));
+    static assert(isEnumUpcastable!(X, X));
+    static assert(isEnumUpcastable!(A, int));
+    static assert(isEnumUpcastable!(C, int));
 
-    static assert(!isEnumSafelyConvertible!(C, A));
-    static assert(!isEnumSafelyConvertible!(A, B));
-    static assert(!isEnumSafelyConvertible!(A, X));
-    static assert(!isEnumSafelyConvertible!(C, X));
-    static assert(!isEnumSafelyConvertible!(X, A));
-    static assert(!isEnumSafelyConvertible!(X, C));
+    static assert(!isEnumUpcastable!(C, A));
+    static assert(!isEnumUpcastable!(A, B));
+    static assert(!isEnumUpcastable!(A, X));
+    static assert(!isEnumUpcastable!(C, X));
+    static assert(!isEnumUpcastable!(X, A));
+    static assert(!isEnumUpcastable!(X, C));
 
-    static assert(!__traits(compiles, isEnumSafelyConvertible!(int, A)));
-    static assert(!__traits(compiles, isEnumSafelyConvertible!(int, C)));
+    static assert(!__traits(compiles, isEnumUpcastable!(int, A)));
+    static assert(!__traits(compiles, isEnumUpcastable!(int, C)));
 }
 
-template isEnumPossiblyConvertible(From, To)
+public template isEnumDowncastable(From, To)
 if (is(From == enum) && is(To == enum) && __traits(isIntegral, From, To)) {
     import std.traits: Unqual;
     import enumcons.type_system: subtypeInfo;
 
-    static if (isEnumSubtype!(To, From) && !is(Unqual!From == Unqual!To))
-        enum bool isEnumPossiblyConvertible = subtypeInfo!(To, From).allowDowncast;
+    static if (!is(Unqual!From == Unqual!To) && isEnumSubtype!(To, From))
+        enum bool isEnumDowncastable = subtypeInfo!(To, From).allowDowncast;
     else
-        enum isEnumPossiblyConvertible = false;
+        enum isEnumDowncastable = false;
 }
 
 ///
@@ -89,23 +89,23 @@ unittest {
     enum X { x }
     alias C = Concat!(A, B);
 
-    static assert(isEnumPossiblyConvertible!(C, A));
-    static assert(is(typeof(isEnumPossiblyConvertible!(C, A)) == bool));
+    static assert(isEnumDowncastable!(C, A));
+    static assert(is(typeof(isEnumDowncastable!(C, A)) == bool));
 
-    static assert(!isEnumPossiblyConvertible!(A, A));
-    static assert(!isEnumPossiblyConvertible!(C, C));
-    static assert(!isEnumPossiblyConvertible!(X, X));
-    static assert(!isEnumPossiblyConvertible!(A, C));
-    static assert(!isEnumPossiblyConvertible!(A, B));
-    static assert(!isEnumPossiblyConvertible!(A, X));
-    static assert(!isEnumPossiblyConvertible!(C, X));
-    static assert(!isEnumPossiblyConvertible!(X, A));
-    static assert(!isEnumPossiblyConvertible!(X, C));
+    static assert(!isEnumDowncastable!(A, A));
+    static assert(!isEnumDowncastable!(C, C));
+    static assert(!isEnumDowncastable!(X, X));
+    static assert(!isEnumDowncastable!(A, C));
+    static assert(!isEnumDowncastable!(A, B));
+    static assert(!isEnumDowncastable!(A, X));
+    static assert(!isEnumDowncastable!(C, X));
+    static assert(!isEnumDowncastable!(X, A));
+    static assert(!isEnumDowncastable!(X, C));
 
-    static assert(!__traits(compiles, isEnumPossiblyConvertible!(int, A)));
-    static assert(!__traits(compiles, isEnumPossiblyConvertible!(A, int)));
-    static assert(!__traits(compiles, isEnumPossiblyConvertible!(int, C)));
-    static assert(!__traits(compiles, isEnumPossiblyConvertible!(C, int)));
+    static assert(!__traits(compiles, isEnumDowncastable!(int, A)));
+    static assert(!__traits(compiles, isEnumDowncastable!(A, int)));
+    static assert(!__traits(compiles, isEnumDowncastable!(int, C)));
+    static assert(!__traits(compiles, isEnumDowncastable!(C, int)));
 }
 
 ///
@@ -116,23 +116,25 @@ unittest {
     alias M = Merge!(A, B);
     alias M1 = Merge!A;
 
-    static assert(isEnumPossiblyConvertible!(U, A));
-    static assert(isEnumPossiblyConvertible!(M1, A));
+    static assert(isEnumDowncastable!(U, A));
+    static assert(isEnumDowncastable!(M1, A));
 
-    static assert(!isEnumPossiblyConvertible!(A, U));
-    static assert(!isEnumPossiblyConvertible!(M, A));
-    static assert(!isEnumPossiblyConvertible!(A, M));
-    static assert(!isEnumPossiblyConvertible!(A, M1));
+    static assert(!isEnumDowncastable!(A, U));
+    static assert(!isEnumDowncastable!(M, A));
+    static assert(!isEnumDowncastable!(A, M));
+    static assert(!isEnumDowncastable!(A, M1));
 }
 
-template canEnumHaveUnknownValue(From, To)
+public template enumFallbackValue(From, To)
 if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
-    isEnumPossiblyConvertible!(From, To)
+    isEnumDowncastable!(From, To)
 ) {
     import enumcons.type_system: subtypeInfo;
 
-    enum bool canEnumHaveUnknownValue = subtypeInfo!(To, From).hasUnknownValue;
+    enum info = subtypeInfo!(To, From);
+    static if (info.hasFallbackValue)
+        enum enumFallbackValue = info.fallbackValue;
 }
 
 version (unittest) { // D <2.082 allows to attach attributes only to global enums.
@@ -144,14 +146,27 @@ unittest {
     enum X { x, y }
     alias C = Concat!(U, X);
 
-    static assert(canEnumHaveUnknownValue!(C, U));
-    static assert(is(typeof(canEnumHaveUnknownValue!(C, U)) == bool));
+    static assert(enumFallbackValue!(C, U) == U.a);
+    static assert(is(typeof(enumFallbackValue!(C, X)) == void));
 
-    static assert(!canEnumHaveUnknownValue!(C, X));
-    static assert(!__traits(compiles, canEnumHaveUnknownValue!(U, X)));
-    static assert(!__traits(compiles, canEnumHaveUnknownValue!(X, U)));
-    static assert(!__traits(compiles, canEnumHaveUnknownValue!(U, C)));
-    static assert(!__traits(compiles, canEnumHaveUnknownValue!(X, C)));
+    static assert(!__traits(compiles, enumFallbackValue!(U, X)));
+    static assert(!__traits(compiles, enumFallbackValue!(X, U)));
+    static assert(!__traits(compiles, enumFallbackValue!(U, C)));
+    static assert(!__traits(compiles, enumFallbackValue!(X, C)));
+}
+
+unittest {
+    enum A { d, e }
+    enum B { f, g }
+    alias C = Concat!(U.c, A);
+    alias D = Concat!(B.f, C.b);
+
+    static assert(enumFallbackValue!(C, U) == U.c);
+    static assert(enumFallbackValue!(D, B) == B.f);
+    static assert(enumFallbackValue!(D, C) == C.b);
+    static assert(enumFallbackValue!(D, U) == U.c); // Not `U.b`.
+    static assert(is(typeof(enumFallbackValue!(C, A)) == void));
+    static assert(is(typeof(enumFallbackValue!(D, A)) == void));
 }
 
 template _isCallable(alias func) {
@@ -166,6 +181,7 @@ template _isCallable(alias func) {
         enum _isCallable = isCallable!func;
 }
 
+// Not public because the format might change in the future.
 package template prettyName(alias T: X!args, alias X, args...) {
     import std.array: join;
     import std.meta: staticMap;

@@ -15,14 +15,14 @@ public struct unknownValue {
     Scan the enum for an `@unknownValue` annotation and return the member it points to. If there are
     no such annotations, return `void`. If multiple, produce a compilation error.
 +/
-template _typeBoundUnknownValue(E) {
+public template typeBoundUnknownValue(E) if (is(E == enum)) {
     // Process annotations of the enum itself.
     static foreach (uda; __traits(getAttributes, E)) {
         static assert(!is(Unqual!uda == unknownValue),
             "When attached to a whole enum, `@unknownValue()` should specify the name of its member"
         );
         static if (is(Unqual!(typeof(uda)) == unknownValue))
-            enum _typeBoundUnknownValue = __traits(getMember, E, uda.memberName);
+            enum typeBoundUnknownValue = __traits(getMember, E, uda.memberName);
     }
     // Process annotations of the enum's members (2.082+).
     static foreach (memberName; __traits(allMembers, E))
@@ -31,7 +31,7 @@ template _typeBoundUnknownValue(E) {
                 "When attached to a member, `@unknownValue` should be used without parentheses",
             );
             static if (is(Unqual!uda == unknownValue))
-                enum _typeBoundUnknownValue = __traits(getMember, E, memberName);
+                enum typeBoundUnknownValue = __traits(getMember, E, memberName);
         }
 }
 
@@ -58,13 +58,13 @@ version (unittest) { // D <2.082 allows to attach attributes only to global enum
 }
 
 unittest {
-    static assert(is(typeof(_typeBoundUnknownValue!U0) == void));
-    static assert(_typeBoundUnknownValue!U1 == U1.a);
-    static assert(!__traits(compiles, _typeBoundUnknownValue!U2));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!U3));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!U4));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!U5));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!U6));
+    static assert(is(typeof(typeBoundUnknownValue!U0) == void));
+    static assert(typeBoundUnknownValue!U1 == U1.a);
+    static assert(!__traits(compiles, typeBoundUnknownValue!U2));
+    static assert(!__traits(compiles, typeBoundUnknownValue!U3));
+    static assert(!__traits(compiles, typeBoundUnknownValue!U4));
+    static assert(!__traits(compiles, typeBoundUnknownValue!U5));
+    static assert(!__traits(compiles, typeBoundUnknownValue!U6));
 }
 
 static if (__VERSION__ >= 2_082)
@@ -83,23 +83,23 @@ unittest {
         enum G { a, @unknownValue b }
     });
 
-    static assert(_typeBoundUnknownValue!A == A.a);
-    static assert(!__traits(compiles, _typeBoundUnknownValue!B));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!C));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!D));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!E));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!F));
-    static assert(!__traits(compiles, _typeBoundUnknownValue!G));
+    static assert(typeBoundUnknownValue!A == A.a);
+    static assert(!__traits(compiles, typeBoundUnknownValue!B));
+    static assert(!__traits(compiles, typeBoundUnknownValue!C));
+    static assert(!__traits(compiles, typeBoundUnknownValue!D));
+    static assert(!__traits(compiles, typeBoundUnknownValue!E));
+    static assert(!__traits(compiles, typeBoundUnknownValue!F));
+    static assert(!__traits(compiles, typeBoundUnknownValue!G));
 }
 
 struct _HasSubtype(E) {
     long offset;
     Flag!`allowDowncast` allowDowncast;
     static if (__traits(compiles, E.init)) {
-        Flag!`hasUnknownValue` hasUnknownValue;
-        E unknownValue;
-    } else
-        enum hasUnknownValue = No.hasUnknownValue;
+        Flag!`hasFallbackValue` hasFallbackValue;
+        E fallbackValue;
+    } else // An opaque enum.
+        enum hasFallbackValue = No.hasFallbackValue;
 }
 
 alias _ProofFor(alias e) = _HasSubtype!(Unqual!(TypeOf!e));
@@ -107,15 +107,15 @@ alias _ProofFor(alias e) = _HasSubtype!(Unqual!(TypeOf!e));
 _ProofFor!enumOrValue
 _createProof(alias enumOrValue)(long offset, Flag!`allowDowncast` allowDowncast) {
     static if (is(Unqual!enumOrValue E)) {
-        alias unknownValue = _typeBoundUnknownValue!E;
-        static if (is(typeof(unknownValue) == void))
+        alias fallback = typeBoundUnknownValue!E;
+        static if (is(typeof(fallback) == void))
             return _HasSubtype!E(offset, allowDowncast);
         else
-            return _HasSubtype!E(offset, allowDowncast, Yes.hasUnknownValue, unknownValue);
+            return _HasSubtype!E(offset, allowDowncast, Yes.hasFallbackValue, fallback);
     } else {
         // The unknown value was specified explicitly. Do not even check whether `@unknownValue`
         // annotations are attached to the type correctly.
-        return typeof(return)(offset, allowDowncast, Yes.hasUnknownValue, enumOrValue);
+        return typeof(return)(offset, allowDowncast, Yes.hasFallbackValue, enumOrValue);
     }
 }
 
@@ -127,6 +127,8 @@ declareSupertype(subtypes...)(in long[ ] offsets, Flag!`allowDowncast` allowDown
     return result;
 }
 
+package enum isAnythingButSubtypeInfo(alias x) = !is(typeof(x) == _HasSubtype!E, E);
+
 unittest {
     enum A { a, b }
     enum B { c, d }
@@ -135,8 +137,8 @@ unittest {
     enum _HasSubtype!A proof0 = { offset: 0 };
     enum _HasSubtype!B proof1 = {
         offset: 2,
-        hasUnknownValue: Yes.hasUnknownValue,
-        unknownValue: B.d,
+        hasFallbackValue: Yes.hasFallbackValue,
+        fallbackValue: B.d,
     };
     static assert(proofs[0] == proof0);
     static assert(proofs[1] == proof1);

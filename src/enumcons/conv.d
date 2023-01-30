@@ -8,7 +8,7 @@ import enumcons.def: Concat;
 pure @safe:
 
 To as(To, From)(From e) nothrow @nogc
-if (is(From == enum) && __traits(isIntegral, From, To) && isEnumSafelyConvertible!(From, To)) {
+if (is(From == enum) && __traits(isIntegral, From, To) && isEnumUpcastable!(From, To)) {
     static if (is(From: To))
         return e;
     else {
@@ -52,8 +52,8 @@ nothrow @nogc unittest {
 
 bool is_(Sub, Super)(Super e) nothrow @nogc
 if (
-    is(Sub == enum) && is(Super == enum) && __traits(isIntegral, Sub, Super) &&
-    isEnumPossiblyConvertible!(Super, Sub)
+    is(Super == enum) && is(Sub == enum) && __traits(isIntegral, Super, Sub) &&
+    isEnumDowncastable!(Super, Sub)
 ) {
     import enumcons.type_system: subtypeInfo;
 
@@ -78,7 +78,7 @@ nothrow @nogc unittest {
 To to(To, From)(From e) nothrow @nogc
 if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
-    isEnumPossiblyConvertible!(From, To) && canEnumHaveUnknownValue!(From, To)
+    isEnumDowncastable!(From, To) && !is(typeof(enumFallbackValue!(From, To)) == void)
 ) {
     import enumcons.type_system: subtypeInfo;
 
@@ -86,7 +86,7 @@ if (
     // TODO: Optimize.
     if (e.is_!To)
         return cast(To)(e - info.offset);
-    return info.unknownValue;
+    return info.fallbackValue;
 }
 
 nothrow @nogc unittest {
@@ -108,7 +108,7 @@ nothrow @nogc unittest {
 To assertTo(To, From)(From e) nothrow @nogc
 if (
     is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
-    isEnumPossiblyConvertible!(From, To)
+    isEnumDowncastable!(From, To)
 )
 in {
     assert(e.is_!To, '`' ~ prettyName!From ~ "` does not hold a value of `" ~ prettyName!To ~ '`');
@@ -143,7 +143,7 @@ version (D_Exceptions) {
     To tryTo(To, From)(From e)
     if (
         is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
-        isEnumPossiblyConvertible!(From, To)
+        isEnumDowncastable!(From, To)
     ) {
         // TODO: Optimize.
         if (e.is_!To)
@@ -168,5 +168,5 @@ version (D_Exceptions) {
     @disable To tryTo(To, From)(From)
     if (
         is(From == enum) && is(To == enum) && __traits(isIntegral, From, To) &&
-        isEnumPossiblyConvertible!(From, To)
+        isEnumDowncastable!(From, To)
     );

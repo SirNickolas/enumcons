@@ -23,9 +23,9 @@ alias _memberNames(alias e) = AliasSeq!(__traits(allMembers, TypeOf!e)); // `Ali
 
 template _Enum(alias generateMembers, Base, enums...) {
     import std.algorithm.searching: maxElement;
-    import std.meta: staticMap;
+    import std.meta: Filter, staticMap;
     import std.traits: OriginalType;
-    import enumcons.type_system: declareSupertype;
+    import enumcons.type_system: declareSupertype, isAnythingButSubtypeInfo;
 
     // Choose the longest member as prefix to avoid name collision.
     enum gensym = [staticMap!(_memberNames, enums)].maxElement!q{a.length};
@@ -54,7 +54,7 @@ template _Enum(alias generateMembers, Base, enums...) {
         // If you have a use case that requires inheriting attributes from all source enums (not
         // just the last), please let me know!
         `@AliasSeq!(declareSupertype!enums(generated.offsets, generated.allowDowncast).expand)
-        @(__traits(getAttributes, TypeOf!(enums[$ - 1])))
+        @Filter!(isAnythingButSubtypeInfo, __traits(getAttributes, TypeOf!(enums[$ - 1])))
         enum _Enum: Base {` ~ generated.code ~ '}' ~
         fixEnumsUntilD2093(`_Enum`)
     );
